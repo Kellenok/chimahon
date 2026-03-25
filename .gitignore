@@ -1,8 +1,9 @@
 # Build files
 .gradle
-#.vscode
+# .vscode
 .kotlin
 build
+.cxx
 
 # IDE files
 *.iml
@@ -13,11 +14,20 @@ build
 
 # Configuration files
 local.properties
+chimahon-release.jks
 
 # macOS specific files
 .DS_Store
 
+# App secrets
 /app/client_secrets.json
 /app/google-services.json
 *.jks
 app/standard/preview/*
+
+# Chimahon additions
+*.md
+/ref
+/external_ocr_refs
+AGENTS.md
+/app/src/main/assets/ocr-test

@@ -3,10 +3,16 @@ package eu.kanade.presentation.more.settings.screen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderBottomButton
+import eu.kanade.tachiyomi.data.ocr.OcrManager
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences.Companion.zoomWideImagesAllowedList
@@ -17,6 +23,12 @@ import eu.kanade.tachiyomi.util.system.hasDisplayCutout
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.launch
+import logcat.LogPriority
+import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.core.common.util.system.logcat
+import eu.kanade.tachiyomi.util.system.toast
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
@@ -41,6 +53,8 @@ object SettingsReaderScreen : SearchableSettings {
         // SY -->
         val forceHorizontalSeekbar by readerPref.forceHorizontalSeekbar().collectAsState()
         // SY <--
+        // Chimahon: OCR manager
+        val ocrManager = remember { Injekt.get<OcrManager>() }
 
         return listOf(
             Preference.PreferenceItem.ListPreference(
@@ -114,6 +128,9 @@ object SettingsReaderScreen : SearchableSettings {
             getPageDownloadingGroup(readerPreferences = readerPref),
             getForkSettingsGroup(readerPreferences = readerPref),
             // SY <--
+            // Chimahon: OCR settings
+            getOcrGroup(readerPreferences = readerPref, ocrManager = ocrManager),
+        )
         )
     }
 
@@ -611,6 +628,61 @@ object SettingsReaderScreen : SearchableSettings {
         )
     }
 
+    // Chimahon: OCR settings group
+    @Composable
+    private fun getOcrGroup(
+        readerPreferences: ReaderPreferences,
+        ocrManager: OcrManager,
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        var ocrCacheSizeText by remember { mutableStateOf("") }
+        val ocrManagerRef = remember { ocrManager }
+
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            try {
+                ocrCacheSizeText = ocrManagerRef.getStorageSize()
+            } catch (e: Exception) {
+                ocrCacheSizeText = ""
+            }
+        }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_category_ocr),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.ocrAutoOnDownload(),
+                    title = stringResource(MR.strings.pref_ocr_auto_on_download),
+                    subtitle = stringResource(MR.strings.pref_ocr_auto_on_download_summary),
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_ocr_cache_size),
+                    subtitle = ocrCacheSizeText,
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_ocr_clear_cache),
+                    onClick = {
+                        scope.launch {
+                            try {
+                                ocrManager.clearCache()
+                                withUIContext {
+                                    context.toast(MR.strings.cache_deleted)
+                                    ocrCacheSizeText = ""
+                                }
+                            } catch (e: Throwable) {
+                                logcat(LogPriority.ERROR, e)
+                                withUIContext {
+                                    context.toast(MR.strings.cache_delete_error)
+                                }
+                            }
+                        }
+                    },
+                ),
+            ),
+        )
+    }
+
+    // SY -->
     @Composable
     private fun getForkSettingsGroup(readerPreferences: ReaderPreferences): Preference.PreferenceGroup {
         val pageLayout by readerPreferences.pageLayout().collectAsState()

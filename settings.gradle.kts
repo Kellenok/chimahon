@@ -41,6 +41,8 @@ dependencyResolutionManagement {
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "Komikku"
+include(":chimahon")
+project(":chimahon").projectDir = file("chimahon")
 include(":app")
 include(":core-metadata")
 include(":core:archive")

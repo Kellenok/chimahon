@@ -99,6 +99,12 @@ fun ReaderAppBars(
     onClickPageLayout: () -> Unit,
     onClickShiftPage: () -> Unit,
     // SY <--
+
+    // Chimahon -->
+    ocrEnabled: Boolean = false,
+    ocrLoading: Boolean = false,
+    onToggleOcr: (() -> Unit)? = null,
+    // Chimahon <--
 ) {
     val isRtl = viewer is R2LPagerViewer
     val backgroundColor = MaterialTheme.colorScheme
@@ -130,6 +136,11 @@ fun ReaderAppBars(
                     onOpenInBrowser = null, // onOpenInBrowser,
                     onShare = null, // onShare,
                     // SY <--
+                    // Chimahon -->
+                    ocrEnabled = ocrEnabled,
+                    ocrLoading = ocrLoading,
+                    onToggleOcr = onToggleOcr,
+                    // Chimahon <--
                 )
                 // SY -->
                 ExhUtils(

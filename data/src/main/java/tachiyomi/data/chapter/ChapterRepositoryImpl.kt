@@ -68,6 +68,7 @@ class ChapterRepositoryImpl(
                     chapterId = chapterUpdate.id,
                     version = chapterUpdate.version,
                     isSyncing = 0,
+                    ocrReady = chapterUpdate.isOcrReady,
                 )
             }
         }
@@ -178,6 +179,58 @@ class ChapterRepositoryImpl(
                 ChapterMapper::mapChapter,
             )
         }
+    }
+
+    override suspend fun getScanlatorsByMergeId(mangaId: Long): List<String> {
+        return handler.awaitList {
+            chaptersQueries.getScanlatorsByMergeId(mangaId) { it.orEmpty() }
+        }
+    }
+
+    override fun getScanlatorsByMergeIdAsFlow(mangaId: Long): Flow<List<String>> {
+        return handler.subscribeToList {
+            chaptersQueries.getScanlatorsByMergeId(mangaId) { it.orEmpty() }
+        }
+    }
+    // SY <--
+
+    // Chimahon: Chapter factory with OCR support
+    private fun mapChapter(
+        id: Long,
+        mangaId: Long,
+        url: String,
+        name: String,
+        scanlator: String?,
+        read: Boolean,
+        bookmark: Boolean,
+        lastPageRead: Long,
+        chapterNumber: Double,
+        sourceOrder: Long,
+        dateFetch: Long,
+        dateUpload: Long,
+        lastModifiedAt: Long,
+        version: Long,
+        @Suppress("UNUSED_PARAMETER")
+        isSyncing: Long,
+        ocrReady: Boolean,
+    ): Chapter = Chapter(
+        id = id,
+        mangaId = mangaId,
+        read = read,
+        bookmark = bookmark,
+        lastPageRead = lastPageRead,
+        dateFetch = dateFetch,
+        sourceOrder = sourceOrder,
+        url = url,
+        name = name,
+        dateUpload = dateUpload,
+        chapterNumber = chapterNumber,
+        scanlator = scanlator,
+        lastModifiedAt = lastModifiedAt,
+        version = version,
+        isOcrReady = ocrReady,
+    )
+}
     }
 
     override suspend fun getScanlatorsByMergeId(mangaId: Long): List<String> {

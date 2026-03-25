@@ -13,7 +13,10 @@ plugins {
     id("com.github.ben-manes.versions")
 }
 
-if (Config.includeTelemetry) {
+val includeTelemetry = false
+val enableUpdater = false
+
+if (includeTelemetry) {
     pluginManager.apply {
         apply(libs.plugins.google.services.get().pluginId)
         apply(libs.plugins.firebase.crashlytics.get().pluginId)
@@ -26,16 +29,16 @@ android {
     namespace = "eu.kanade.tachiyomi"
 
     defaultConfig {
-        applicationId = "app.komikku"
+        applicationId = "app.chimahon"
 
-        versionCode = 78
-        versionName = "1.13.6"
+        versionCode = 1
+        versionName = "0.1.0"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLastCommitTime = false)}\"")
-        buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
-        buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
+        buildConfigField("boolean", "TELEMETRY_INCLUDED", "false")
+        buildConfigField("boolean", "UPDATER_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -45,6 +48,8 @@ android {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-${getCommitCount()}"
             isPseudoLocalesEnabled = true
+            buildConfigField("boolean", "TELEMETRY_INCLUDED", "false")
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         val release by getting {
             isMinifyEnabled = Config.enableCodeShrink
@@ -53,6 +58,8 @@ android {
             proguardFiles("proguard-android-optimize.txt", "proguard-rules.pro")
 
             buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLastCommitTime = true)}\"")
+            buildConfigField("boolean", "TELEMETRY_INCLUDED", "false")
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
 
         val commonMatchingFallbacks = listOf(release.name)
@@ -72,6 +79,9 @@ android {
             applicationIdSuffix = ".foss"
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
+
+            buildConfigField("boolean", "TELEMETRY_INCLUDED", "false")
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         create("preview") {
             initWith(release)
@@ -84,6 +94,8 @@ android {
             matchingFallbacks.addAll(commonMatchingFallbacks)
 
             buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLastCommitTime = false)}\"")
+            buildConfigField("boolean", "TELEMETRY_INCLUDED", "false")
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         create("benchmark") {
             initWith(release)
@@ -96,6 +108,9 @@ android {
             signingConfig = debug.signingConfig
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
+
+            buildConfigField("boolean", "TELEMETRY_INCLUDED", "false")
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
     }
 
@@ -138,6 +153,7 @@ android {
                 "META-INF/LICENSE",
                 "META-INF/NOTICE",
                 "META-INF/README.md",
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
             )
         }
     }
@@ -184,6 +200,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(projects.chimahon)
+
     implementation(projects.i18n)
     // KMK -->
     implementation(projects.i18nKmk)

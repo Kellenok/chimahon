@@ -42,6 +42,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
+import eu.kanade.tachiyomi.ui.dictionary.DictionaryTab
 import eu.kanade.tachiyomi.ui.download.DownloadQueueScreen
 import eu.kanade.tachiyomi.ui.history.HistoryTab
 import eu.kanade.tachiyomi.ui.library.LibraryTab
@@ -80,6 +81,7 @@ object HomeScreen : Screen() {
         UpdatesTab,
         HistoryTab,
         BrowseTab,
+        DictionaryTab,
         MoreTab,
     )
 
@@ -188,6 +190,7 @@ object HomeScreen : Screen() {
                                 }
                                 BrowseTab
                             }
+                            Tab.Dictionary -> DictionaryTab
                             is Tab.More -> MoreTab
                         }
 
@@ -351,6 +354,7 @@ object HomeScreen : Screen() {
         data object Updates : Tab
         data object History : Tab
         data class Browse(val toExtensions: Boolean = false) : Tab
+        data object Dictionary : Tab
         data class More(
             val toDownloads: Boolean,
             // KMK -->

@@ -45,6 +45,7 @@ object Notifications {
     // KMK -->
     const val ID_DOWNLOAD_CHAPTER_PAUSED = -203
     // KMK <--
+    const val ID_OCR_PROGRESS = -204
     const val CHANNEL_DOWNLOADER_ERROR = "downloader_error_channel"
     const val ID_DOWNLOAD_CHAPTER_ERROR = -202
 

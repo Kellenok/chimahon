@@ -104,6 +104,14 @@ class ReaderPreferences(
     fun pagedDisableZoomIn() = preferenceStore.getBoolean("paged_disable_zoom_in", false)
     // KMK <--
 
+    // Chimahon -->
+    fun ocrOverlayEnabled() = preferenceStore.getBoolean("reader_ocr_overlay_enabled", false)
+
+    fun ocrOutlineVisible() = preferenceStore.getBoolean("reader_ocr_outline_visible", false)
+
+    fun ocrAutoOnDownload() = preferenceStore.getBoolean("ocr_auto_on_download", false)
+    // Chimahon <--
+
     // endregion
 
     // region Split two page spread
