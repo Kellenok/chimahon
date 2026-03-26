@@ -32,7 +32,12 @@ data class OcrDebugResult(
 
 data class MergeConfig(
     val enabled: Boolean = true,
-    val fontSizeRatio: Double = 3.0,
-    val addSpaceOnMerge: Boolean? = null,
     val language: OcrLanguage = OcrLanguage.JAPANESE,
+    val addSpaceOnMerge: Boolean? = null,
+    val furiganaFilter: Boolean = true,
+    val mergeCloseParagraphs: Boolean = true,
+    val supportCenterAlignedText: Boolean = true,
+    // Legacy field kept for backward compat with old LensMerger
+    @Deprecated("Use characterSize-relative thresholds instead")
+    val fontSizeRatio: Double = 3.0,
 )

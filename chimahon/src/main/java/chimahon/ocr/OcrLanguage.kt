@@ -57,4 +57,7 @@ enum class OcrLanguage(
 
     val isJapanese: Boolean
         get() = this == JAPANESE
+
+    val isRtl: Boolean
+        get() = this == ARABIC || this == HEBREW
 }

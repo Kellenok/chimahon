@@ -9,10 +9,10 @@
 namespace {
     struct LookupObject {
         DictionaryQuery query;
-        Deconjugator deconjugator;
+        Deinflector deinflector;
         std::unique_ptr<Lookup> lookup;
 
-        LookupObject() : lookup(std::make_unique<Lookup>(query, deconjugator)) {}
+        LookupObject() : lookup(std::make_unique<Lookup>(query, deinflector)) {}
     };
 
     LookupObject *as_object(jlong handle) { return reinterpret_cast<LookupObject *>(handle); }
@@ -47,11 +47,12 @@ namespace {
     }
 
     jobjectArray
-    new_process_array(JNIEnv *env, const std::vector<std::string> &process) {
+    new_process_array(JNIEnv *env, const std::vector<TransformGroup> &trace) {
         jclass cls = env->FindClass("java/lang/String");
-        jobjectArray array = env->NewObjectArray(static_cast<jsize>(process.size()), cls, nullptr);
-        for (size_t i = 0; i < process.size(); ++i) {
-            jobject item = new_string(env, process[i]);
+        jobjectArray array = env->NewObjectArray(static_cast<jsize>(trace.size()), cls, nullptr);
+        for (size_t i = 0; i < trace.size(); ++i) {
+            std::string entry = trace[i].name + ": " + trace[i].description;
+            jobject item = new_string(env, entry);
             env->SetObjectArrayElement(array, static_cast<jsize>(i), item);
             env->DeleteLocalRef(item);
         }
@@ -184,7 +185,7 @@ namespace {
                                           "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Lchimahon/TermResult;I)V");
         jstring matched = new_string(env, result.matched);
         jstring deinflected = new_string(env, result.deinflected);
-        jobjectArray process = new_process_array(env, result.process);
+        jobjectArray process = new_process_array(env, result.trace);
         jobject term = new_term_result(env, result.term);
         jobject out = env->NewObject(cls, ctor, matched, deinflected, process, term,
                                      static_cast<jint>(result.preprocessor_steps));
@@ -252,7 +253,7 @@ Java_chimahon_HoshiDicts_rebuildQuery(JNIEnv *env, jobject, jlong session,
                     [&](const std::string &path) { obj->query.add_freq_dict(path); });
     for_each_string(env, pitch_paths,
                     [&](const std::string &path) { obj->query.add_pitch_dict(path); });
-    obj->lookup = std::make_unique<Lookup>(obj->query, obj->deconjugator);
+    obj->lookup = std::make_unique<Lookup>(obj->query, obj->deinflector);
 }
 
 extern "C" JNIEXPORT jobject JNICALL

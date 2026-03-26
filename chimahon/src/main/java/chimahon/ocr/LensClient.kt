@@ -83,29 +83,28 @@ class LensClient(
         }
     }
 
+    enum class MergerType { LEGACY, OWOCR }
+
     suspend fun getDebugOcrData(
         bytes: ByteArray,
         language: OcrLanguage = OcrLanguage.JAPANESE,
         addSpaceOnMerge: Boolean? = null,
+        merger: MergerType = MergerType.OWOCR,
     ): OcrDebugResult = withContext(Dispatchers.IO) {
         retryOcr {
             val rawChunks = getRawOcrDataInternal(bytes, language)
             val config = MergeConfig(language = language, addSpaceOnMerge = addSpaceOnMerge)
-            val mergedResults = rawChunks.flatMap { chunk ->
-                val merged = LensMerger.autoMerge(chunk.lines, chunk.width, chunk.height, config)
-
-                merged.map { result ->
-                    val box = result.tightBoundingBox
-                    val globalPixelY = box.y + chunk.globalY.toDouble()
-
-                    result.copy(
-                        tightBoundingBox = box.copy(
-                            x = box.x / chunk.fullWidth.toDouble(),
-                            y = globalPixelY / chunk.fullHeight.toDouble(),
-                            width = box.width / chunk.fullWidth.toDouble(),
-                            height = box.height / chunk.fullHeight.toDouble(),
-                        ),
-                    )
+            val mergedResults = when (merger) {
+                MergerType.LEGACY -> rawChunks.flatMap { chunk ->
+                    LensMerger.autoMerge(chunk.lines, chunk.width, chunk.height, config).map { result ->
+                        result.normalizeFromChunk(chunk)
+                    }
+                }
+                MergerType.OWOCR -> rawChunks.flatMap { chunk ->
+                    val engineLines = chunk.lines.map { it.toEngineLine(chunk, language) }
+                    OwOCRMerger.merge(engineLines, config).map { result ->
+                        result.normalizeFromChunk(chunk)
+                    }
                 }
             }
 
@@ -120,7 +119,7 @@ class LensClient(
         bytes: ByteArray,
         language: OcrLanguage,
     ): List<RawChunk> {
-        return splitImageIntoChunks(bytes).map { chunk ->
+        return prepareForOcr(bytes).map { chunk ->
             val lensResult = processImageBytes(chunk.pngBytes, language.bcp47)
             val flatLines = LensMerger.flattenToPixelLines(lensResult, chunk.width, chunk.height, language)
             RawChunk(
@@ -262,6 +261,39 @@ class LensClient(
             ?.takeIf { it.isNotEmpty() }
             ?: return null
         return parts.joinToString("\n")
+    }
+
+    private fun OcrResult.normalizeFromChunk(chunk: RawChunk): OcrResult {
+        val box = tightBoundingBox
+        val globalPixelY = box.y + chunk.globalY.toDouble()
+        return copy(
+            tightBoundingBox = box.copy(
+                x = box.x / chunk.fullWidth.toDouble(),
+                y = globalPixelY / chunk.fullHeight.toDouble(),
+                width = box.width / chunk.fullWidth.toDouble(),
+                height = box.height / chunk.fullHeight.toDouble(),
+            ),
+        )
+    }
+
+    private fun OcrResult.toEngineLine(chunk: RawChunk, language: OcrLanguage): EngineLine {
+        val box = tightBoundingBox
+        val normBox = NormalizedBBox(
+            left = box.x / chunk.fullWidth.toDouble(),
+            top = (box.y + chunk.globalY.toDouble()) / chunk.fullHeight.toDouble(),
+            right = (box.x + box.width) / chunk.fullWidth.toDouble(),
+            bottom = (box.y + box.height + chunk.globalY.toDouble()) / chunk.fullHeight.toDouble(),
+        )
+        val direction = when (forcedOrientation) {
+            "vertical" -> WritingDirection.TTB
+            else -> WritingDirection.LTR
+        }
+        return EngineLine(
+            text = text,
+            bbox = normBox,
+            writingDirection = direction,
+            language = language,
+        )
     }
 
     companion object {
