@@ -15,6 +15,7 @@ build
 # Configuration files
 local.properties
 chimahon-release.jks
+keystore_base64.txt
 
 # macOS specific files
 .DS_Store
