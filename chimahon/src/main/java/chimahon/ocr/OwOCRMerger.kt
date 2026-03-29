@@ -309,8 +309,8 @@ internal object OwOCRMerger {
         if (isVertical) {
             val hDist = horizontalDistance(line1.bbox, line2.bbox)
             val lineWidth = maxOf(line1.bbox.width, line2.bbox.width)
-            if (hDist >= lineWidth * 2) return false
-            if (abs(line1.bbox.top - line2.bbox.top) < 2 * characterSize) return true
+            if (hDist >= lineWidth) return false
+            if (abs(line1.bbox.top - line2.bbox.top) < characterSize) return true
         } else {
             val vDist = verticalDistance(line1.bbox, line2.bbox)
             val lineHeight = maxOf(line1.bbox.height, line2.bbox.height)
