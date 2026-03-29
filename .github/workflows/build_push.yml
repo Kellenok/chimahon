@@ -38,7 +38,9 @@ jobs:
           distribution: temurin
 
       - name: Write google-services.json
-        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        env:
+          GS_CONTENT: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        if: env.GS_CONTENT != ''
         uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
         with:
           path: app/google-services.json
@@ -46,7 +48,9 @@ jobs:
           write-mode: overwrite
 
       - name: Write client_secrets.json
-        if: ${{ secrets.GOOGLE_CLIENT_SECRETS_JSON != '' }}
+        env:
+          CS_CONTENT: ${{ secrets.GOOGLE_CLIENT_SECRETS_JSON }}
+        if: env.CS_CONTENT != ''
         uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
         with:
           path: app/src/main/assets/client_secrets.json
@@ -74,7 +78,9 @@ jobs:
           path: app/build/reports/tests/testReleaseUnitTest
 
       - name: Sign APK
-        if: ${{ secrets.SIGNING_KEY != '' }}
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        if: env.SIGNING_KEY != ''
         uses: r0adkll/sign-android-release@f30bdd30588842ac76044ecdbd4b6d0e3e813478
         with:
           releaseDirectory: app/build/outputs/apk/preview
