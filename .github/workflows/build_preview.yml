@@ -130,6 +130,7 @@ jobs:
           distribution: temurin
 
       - name: Write google-services.json
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
         uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
         with:
           path: app/google-services.json
@@ -137,6 +138,7 @@ jobs:
           write-mode: overwrite
 
       - name: Write client_secrets.json
+        if: ${{ secrets.GOOGLE_CLIENT_SECRETS_JSON != '' }}
         uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
         with:
           path: app/src/main/assets/client_secrets.json
@@ -173,6 +175,7 @@ jobs:
           merge-multiple: true
 
       - name: Sign APK
+        if: ${{ secrets.SIGNING_KEY != '' }}
         uses: r0adkll/sign-android-release@f30bdd30588842ac76044ecdbd4b6d0e3e813478
         with:
           releaseDirectory: app/build/outputs/apk/preview
@@ -188,11 +191,11 @@ jobs:
         run: |
           set -e
 
-          mv app/build/outputs/apk/${{ needs.prepare-build.outputs.ARTIFACTS_PREFIX }}-universal-preview-signed.apk Komikku-${{ needs.prepare-build.outputs.TAG_NAME }}.apk
-          mv app/build/outputs/apk/${{ needs.prepare-build.outputs.ARTIFACTS_PREFIX }}-arm64-v8a-preview-signed.apk Komikku-arm64-v8a-${{ needs.prepare-build.outputs.TAG_NAME }}.apk
-          mv app/build/outputs/apk/${{ needs.prepare-build.outputs.ARTIFACTS_PREFIX }}-armeabi-v7a-preview-signed.apk Komikku-armeabi-v7a-${{ needs.prepare-build.outputs.TAG_NAME }}.apk
-          mv app/build/outputs/apk/${{ needs.prepare-build.outputs.ARTIFACTS_PREFIX }}-x86-preview-signed.apk Komikku-x86-${{ needs.prepare-build.outputs.TAG_NAME }}.apk
-          mv app/build/outputs/apk/${{ needs.prepare-build.outputs.ARTIFACTS_PREFIX }}-x86_64-preview-signed.apk Komikku-x86_64-${{ needs.prepare-build.outputs.TAG_NAME }}.apk
+          find app/build/outputs/apk/preview/ -name "*-universal-preview*.apk" -exec mv {} Komikku-${{ needs.prepare-build.outputs.TAG_NAME }}.apk \;
+          find app/build/outputs/apk/preview/ -name "*-arm64-v8a-preview*.apk" -exec mv {} Komikku-arm64-v8a-${{ needs.prepare-build.outputs.TAG_NAME }}.apk \;
+          find app/build/outputs/apk/preview/ -name "*-armeabi-v7a-preview*.apk" -exec mv {} Komikku-armeabi-v7a-${{ needs.prepare-build.outputs.TAG_NAME }}.apk \;
+          find app/build/outputs/apk/preview/ -name "*-x86-preview*.apk" -exec mv {} Komikku-x86-${{ needs.prepare-build.outputs.TAG_NAME }}.apk \;
+          find app/build/outputs/apk/preview/ -name "*-x86_64-preview*.apk" -exec mv {} Komikku-x86_64-${{ needs.prepare-build.outputs.TAG_NAME }}.apk \;
 
       - name: Create release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0

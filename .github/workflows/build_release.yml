@@ -98,6 +98,7 @@ jobs:
           distribution: temurin
 
       - name: Write google-services.json
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
         uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
         with:
           path: app/google-services.json
@@ -105,6 +106,7 @@ jobs:
           write-mode: overwrite
 
       - name: Write client_secrets.json
+        if: ${{ secrets.GOOGLE_CLIENT_SECRETS_JSON != '' }}
         uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
         with:
           path: app/src/main/assets/client_secrets.json
@@ -147,6 +149,7 @@ jobs:
           merge-multiple: true
 
       - name: Sign APK
+        if: ${{ secrets.SIGNING_KEY != '' }}
         uses: r0adkll/sign-android-release@f30bdd30588842ac76044ecdbd4b6d0e3e813478
         with:
           releaseDirectory: app/build/outputs/apk/release
@@ -162,11 +165,11 @@ jobs:
         run: |
           set -e
 
-          mv app/build/outputs/apk/release/app-universal-release-unsigned-signed.apk Komikku-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk
-          mv app/build/outputs/apk/release/app-arm64-v8a-release-unsigned-signed.apk Komikku-arm64-v8a-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk
-          mv app/build/outputs/apk/release/app-armeabi-v7a-release-unsigned-signed.apk Komikku-armeabi-v7a-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk
-          mv app/build/outputs/apk/release/app-x86-release-unsigned-signed.apk Komikku-x86-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk
-          mv app/build/outputs/apk/release/app-x86_64-release-unsigned-signed.apk Komikku-x86_64-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk
+          find app/build/outputs/apk/release/ -name "*-universal-release*.apk" -exec mv {} Komikku-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk \;
+          find app/build/outputs/apk/release/ -name "*-arm64-v8a-release*.apk" -exec mv {} Komikku-arm64-v8a-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk \;
+          find app/build/outputs/apk/release/ -name "*-armeabi-v7a-release*.apk" -exec mv {} Komikku-armeabi-v7a-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk \;
+          find app/build/outputs/apk/release/ -name "*-x86-release*.apk" -exec mv {} Komikku-x86-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk \;
+          find app/build/outputs/apk/release/ -name "*-x86_64-release*.apk" -exec mv {} Komikku-x86_64-${{ needs.prepare-build.outputs.VERSION_TAG }}.apk \;
 
       - name: Create release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
