@@ -269,12 +269,12 @@ fun Sponsor() {
             ) {
                 Icon(
                     imageVector = Icons.Filled.Star,
-                    contentDescription = stringResource(KMR.strings.sponsor_me),
+                    contentDescription = stringResource(KMR.strings.star_me),
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = stringResource(KMR.strings.sponsor_me),
+                    text = stringResource(KMR.strings.star_me),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -285,7 +285,7 @@ fun Sponsor() {
 
 @PreviewLightDark
 @Composable
-private fun SponsorPreview() {
+private fun StarPreview() {
     TachiyomiPreviewTheme {
         Surface(
             modifier = Modifier

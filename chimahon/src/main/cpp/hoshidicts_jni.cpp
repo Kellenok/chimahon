@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <pthread.h>
 
 #include <memory>
 #include <string>
@@ -229,6 +230,20 @@ namespace {
         }
         return array;
     }
+
+    // Import thread arguments
+    struct ImportArgs {
+        std::string zip_path;
+        std::string output_dir;
+        ImportResult result;
+    };
+
+    // Thread function for import with large stack
+    void* import_thread_func(void* arg) {
+        ImportArgs* args = static_cast<ImportArgs*>(arg);
+        args->result = dictionary_importer::import(args->zip_path, args->output_dir, true);
+        return nullptr;
+    }
 }
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -243,8 +258,8 @@ Java_chimahon_HoshiDicts_destroyLookupObject(JNIEnv *, jobject, jlong session) {
 
 extern "C" JNIEXPORT void JNICALL
 Java_chimahon_HoshiDicts_rebuildQuery(JNIEnv *env, jobject, jlong session,
-                                              jobjectArray term_paths, jobjectArray freq_paths,
-                                              jobjectArray pitch_paths) {
+                                      jobjectArray term_paths, jobjectArray freq_paths,
+                                      jobjectArray pitch_paths) {
     LookupObject *obj = as_object(session);
     obj->query = DictionaryQuery{};
     for_each_string(env, term_paths,
@@ -258,18 +273,36 @@ Java_chimahon_HoshiDicts_rebuildQuery(JNIEnv *env, jobject, jlong session,
 
 extern "C" JNIEXPORT jobject JNICALL
 Java_chimahon_HoshiDicts_importDictionary(JNIEnv *env, jobject, jstring zip_path,
-                                                  jstring output_dir) {
-    auto zip_path_str = jstring_to_std_string(env, zip_path);
-    auto output_dir_str = jstring_to_std_string(env, output_dir);
-    const auto result = dictionary_importer::import(zip_path_str, output_dir_str, true);
-    return new_import_result(env, result.success, static_cast<jlong>(result.term_count),
-                             static_cast<jlong>(result.meta_count),
-                             static_cast<jlong>(result.media_count));
+                                          jstring output_dir) {
+    ImportArgs args;
+    args.zip_path = jstring_to_std_string(env, zip_path);
+    args.output_dir = jstring_to_std_string(env, output_dir);
+
+    // Create thread with 16 MB stack to handle radix sort's large stack allocations
+    pthread_t thread;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 16 * 1024 * 1024);  // 16 MB stack
+
+    int rc = pthread_create(&thread, &attr, import_thread_func, &args);
+    pthread_attr_destroy(&attr);
+
+    if (rc == 0) {
+        pthread_join(thread, nullptr);
+    } else {
+        // Fallback: run on current thread (risky, but better than silent failure)
+        args.result = dictionary_importer::import(args.zip_path, args.output_dir, true);
+    }
+
+    return new_import_result(env, args.result.success,
+                             static_cast<jlong>(args.result.term_count),
+                             static_cast<jlong>(args.result.meta_count),
+                             static_cast<jlong>(args.result.media_count));
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL
 Java_chimahon_HoshiDicts_lookup(JNIEnv *env, jobject, jlong session, jstring text,
-                                        jint max_results) {
+                                jint max_results) {
     LookupObject *obj = as_object(session);
     auto text_str = jstring_to_std_string(env, text);
     auto result = obj->lookup->lookup(text_str, static_cast<int>(max_results));
@@ -285,7 +318,7 @@ Java_chimahon_HoshiDicts_getStyles(JNIEnv *env, jobject, jlong session) {
 
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_chimahon_HoshiDicts_getMediaFile(JNIEnv *env, jobject, jlong session,
-                                              jstring dict_name, jstring media_path) {
+                                      jstring dict_name, jstring media_path) {
     LookupObject *obj = as_object(session);
     auto dict_name_str = jstring_to_std_string(env, dict_name);
     auto media_path_str = jstring_to_std_string(env, media_path);

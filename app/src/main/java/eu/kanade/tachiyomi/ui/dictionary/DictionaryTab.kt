@@ -242,20 +242,8 @@ data object DictionaryTab : Tab {
 
                             // Check which expressions are already in Anki
                             if (ankiEnabled && ankiModel.isNotBlank() && results.isNotEmpty()) {
-                                val bridge = AnkiDroidBridge(context)
-                                val foundExpressions = mutableSetOf<String>()
                                 val uniqueExpressions = results.map { it.term.expression }.distinct()
-                                for (expr in uniqueExpressions) {
-                                    try {
-                                        val notes = bridge.findNotes(expr, ankiModel)
-                                        if (notes.isNotEmpty()) {
-                                            foundExpressions.add(expr)
-                                        }
-                                    } catch (_: Exception) {
-                                        // Ignore errors
-                                    }
-                                }
-                                existingExpressions = foundExpressions
+                                existingExpressions = AnkiCardCreator.checkExistingCards(context, uniqueExpressions, ankiModel)
                             }
 
                             lookupResult.diagnostics?.let { diagnostics ->
