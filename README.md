@@ -5,11 +5,11 @@
 
 | Releases |
 |----------|
-| <div align="center"> [![GitHub downloads](https://img.shields.io/github/downloads/sohilsayed/chimahon/latest/total?label=Latest%20Downloads&labelColor=27303D&color=0D1111&logo=github&logoColor=FFFFFF&style=flat)](https://github.com/sohilsayed/chimahon/releases/latest) [![GitHub downloads](https://img.shields.io/github/downloads/sohilsayed/chimahon/total?label=Total%20Downloads&labelColor=27303D&color=0D1111&logo=github&logoColor=FFFFFF&style=flat)](https://github.com/sohilsayed/chimahon/releases) [![Release build](https://img.shields.io/github/actions/workflow/status/sohilsayed/chimahon/release.yml?labelColor=27303D&label=Release&labelColor=06599d&color=043b69)](https://github.com/sohilsayed/chimahon/actions/workflows/release.yml) |
+| <div align="center"> [![GitHub downloads](https://img.shields.io/github/downloads/sohilsayed/chimahon/latest/total?label=Latest%20Downloads&labelColor=27303D&color=0D1111&logo=github&logoColor=FFFFFF&style=flat)](https://github.com/sohilsayed/chimahon/releases/latest) [![GitHub downloads](https://img.shields.io/github/downloads/sohilsayed/chimahon/total?label=Total%20Downloads&labelColor=27303D&color=0D1111&logo=github&logoColor=FFFFFF&style=flat)](https://github.com/sohilsayed/chimahon/releases) |
 
 *Requires Android 8.0 or higher.*
 
-[Discord](https://discord.gg/zZAZXce7d)
+[![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white&label=)](https://discord.gg/zZAZXce7d)
 [![License: GPL-3.0](https://img.shields.io/github/license/sohilsayed/chimahon?labelColor=27303D&color=0877d2)](/LICENSE)
 
 ## Download
