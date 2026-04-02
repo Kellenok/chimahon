@@ -10,7 +10,6 @@
 *Requires Android 8.0 or higher.*
 
 [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white&label=)](https://discord.gg/zZAZXce7d)
-[![License: GPL-3.0](https://img.shields.io/github/license/sohilsayed/chimahon?labelColor=27303D&color=0877d2)](/LICENSE)
 
 ## Download
 
