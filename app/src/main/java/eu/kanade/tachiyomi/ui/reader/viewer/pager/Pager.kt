@@ -44,7 +44,11 @@ open class Pager(
      * Gesture listener that implements tap and long tap events.
      */
     private val gestureListener = object : GestureDetectorWithLongTap.Listener() {
-        override fun onSingleTapConfirmed(ev: MotionEvent): Boolean {
+        override fun onDown(ev: MotionEvent): Boolean {
+            return true
+        }
+
+        override fun onSingleTapUp(ev: MotionEvent): Boolean {
             tapListener?.invoke(ev)
             return true
         }

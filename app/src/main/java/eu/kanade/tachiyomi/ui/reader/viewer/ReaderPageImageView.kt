@@ -136,10 +136,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
 
+    private val lifecycleOwner = context as? LifecycleOwner
+    private val lifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onDestroy(owner: LifecycleOwner) {
+            releaseOcrResources()
+            owner.lifecycle.removeObserver(this)
+        }
+    }
+
     /**
      * For automatic background. Will be set as background color when [onImageLoaded] is called.
      */
     var pageBackground: Drawable? = null
+
+    init {
+        lifecycleOwner?.lifecycle?.addObserver(lifecycleObserver)
+    }
 
     @CallSuper
     open fun onImageLoaded() {
@@ -359,10 +371,23 @@ open class ReaderPageImageView @JvmOverloads constructor(
         addView(pageView, ssivWidth, ssivHeight)
 
         // Pre-warm WebView for OCR dictionary lookup in both reader modes.
+        ensureOcrResources()
+    }
+
+    private fun ensureOcrResources() {
         if (ocrWebView == null) {
             ocrWebView = createOcrWebView(context)
+        }
+        if (dictionaryRepository == null) {
             dictionaryRepository = DictionaryRepository(context.getExternalFilesDir(null))
         }
+    }
+
+    private fun releaseOcrResources() {
+        ocrWebView?.destroy()
+        ocrWebView = null
+        dictionaryRepository?.close()
+        dictionaryRepository = null
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -577,11 +602,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        // Destroy pre-warmed WebView when view is permanently removed (user exits reader)
-        ocrWebView?.destroy()
-        ocrWebView = null
-        dictionaryRepository?.close()
-        dictionaryRepository = null
+        // Keep OCR resources alive across RecyclerView detach/attach cycles in continuous mode.
+        // They are released in lifecycle onDestroy via [releaseOcrResources].
     }
 
     /**
@@ -630,6 +652,15 @@ open class ReaderPageImageView @JvmOverloads constructor(
             // Second tap on active block -> show dictionary popup
             val ssiv = pageView as? SubsamplingScaleImageView ?: return true
             val charOffset = getCharOffset(block, viewX, viewY, ssiv) ?: 0
+            if (charOffset !in block.fullText.indices) {
+                logcat(LogPriority.WARN) { "OCR char offset out of bounds: offset=$charOffset len=${block.fullText.length}" }
+                return true
+            }
+            val tappedChar = block.fullText[charOffset]
+            if (!isLookupStartChar(tappedChar)) {
+                logcat { "OCR second tap ignored on punctuation/non-word char '$tappedChar' at offset=$charOffset" }
+                return true
+            }
             val lookupString = block.fullText.substring(charOffset)
             logcat {
                 "OCR second tap: lookup offset=$charOffset remainingChars=${lookupString.length} x=$viewX y=$viewY"
@@ -639,6 +670,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 return true
             }
 
+            ensureOcrResources()
             val webView = ocrWebView
             val repository = dictionaryRepository
             if (webView != null && repository != null) {
@@ -649,6 +681,23 @@ open class ReaderPageImageView @JvmOverloads constructor(
             }
             true
         }
+    }
+
+    private fun isLookupStartChar(char: Char): Boolean {
+        if (char.isWhitespace()) return false
+        // Skip punctuation/symbol taps (., 。, 、, !, ?, brackets, etc.).
+        val type = Character.getType(char)
+        return type != Character.CONNECTOR_PUNCTUATION.toInt() &&
+            type != Character.DASH_PUNCTUATION.toInt() &&
+            type != Character.START_PUNCTUATION.toInt() &&
+            type != Character.END_PUNCTUATION.toInt() &&
+            type != Character.INITIAL_QUOTE_PUNCTUATION.toInt() &&
+            type != Character.FINAL_QUOTE_PUNCTUATION.toInt() &&
+            type != Character.OTHER_PUNCTUATION.toInt() &&
+            type != Character.MATH_SYMBOL.toInt() &&
+            type != Character.CURRENCY_SYMBOL.toInt() &&
+            type != Character.MODIFIER_SYMBOL.toInt() &&
+            type != Character.OTHER_SYMBOL.toInt()
     }
 
     /**
