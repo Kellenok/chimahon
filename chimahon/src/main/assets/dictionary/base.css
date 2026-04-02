@@ -76,8 +76,18 @@ html, body {
   letter-spacing: 0.05em;
 }
 
+.inflection-toggle {
+  font-size: 0.85em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.inflection-toggle:hover {
+  opacity: 1;
+}
+
 .inflection-rule-chains {
-  margin: 8px 0;
+  margin: 4px 0 8px 0;
   padding-left: 1rem;
   font-size: 0.9em;
   opacity: 0.8;
@@ -141,6 +151,21 @@ html, body {
 .pronunciation-group-list {
   margin: 0;
   padding-left: 1.1rem;
+}
+
+.frequency-top-section {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.frequency-top-section .tag {
+  align-items: stretch;
+}
+
+.frequency-top-section .tag-body {
+  margin-left: 2px;
 }
 
 .frequency-item + .frequency-item::before {

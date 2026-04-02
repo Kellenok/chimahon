@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,6 +85,43 @@ private const val TAG = "DictionaryImport"
 
 private val _dictionaryNames = MutableStateFlow<List<String>>(emptyList())
 private val dictionaryNames = _dictionaryNames.asStateFlow()
+
+private val markerDisplayLabels: Map<String, String> = Marker.ALL.associateWith { marker ->
+    val isTodo = marker in Marker.TODO_MARKERS
+    val prefix = if (isTodo) "[TODO] " else ""
+    when (marker) {
+        Marker.EXPRESSION -> "${prefix}Expression"
+        Marker.READING -> "${prefix}Reading"
+        Marker.FURIGANA -> "${prefix}Furigana"
+        Marker.FURIGANA_PLAIN -> "${prefix}Furigana Plain"
+        Marker.GLOSSARY -> "${prefix}Glossary"
+        Marker.GLOSSARY_BRIEF -> "${prefix}Glossary Brief"
+        Marker.GLOSSARY_PLAIN -> "${prefix}Glossary Plain"
+        Marker.GLOSSARY_NO_DICT -> "${prefix}Glossary No Dict"
+        Marker.GLOSSARY_FIRST -> "${prefix}Glossary First"
+        Marker.GLOSSARY_FIRST_BRIEF -> "${prefix}Glossary First Brief"
+        Marker.SENTENCE -> "${prefix}Sentence"
+        Marker.CLOZE_PREFIX -> "${prefix}Cloze Prefix"
+        Marker.CLOZE_BODY -> "${prefix}Cloze Body"
+        Marker.CLOZE_BODY_KANA -> "${prefix}Cloze Body Kana"
+        Marker.CLOZE_SUFFIX -> "${prefix}Cloze Suffix"
+        Marker.TAGS -> "${prefix}Tags"
+        Marker.PART_OF_SPEECH -> "${prefix}Part of Speech"
+        Marker.CONJUGATION -> "${prefix}Conjugation"
+        Marker.DICTIONARY -> "${prefix}Dictionary"
+        Marker.DICTIONARY_ALIAS -> "${prefix}Dictionary Alias"
+        Marker.FREQUENCIES -> "${prefix}Frequencies"
+        Marker.FREQUENCY_HARMONIC_RANK -> "${prefix}Freq Harmonic"
+        Marker.FREQUENCY_AVERAGE_RANK -> "${prefix}Freq Average"
+        Marker.PITCH_ACCENTS -> "${prefix}Pitch Accents"
+        Marker.PITCH_ACCENT_POSITIONS -> "${prefix}Pitch Positions"
+        Marker.PITCH_ACCENT_CATEGORIES -> "${prefix}Pitch Categories"
+        Marker.AUDIO -> "${prefix}Audio"
+        Marker.SCREENSHOT -> "${prefix}Screenshot"
+        Marker.SEARCH_QUERY -> "${prefix}Search Query"
+        else -> marker
+    }
+}
 
 private fun loadDictionaryList(context: Context) {
     Log.d(TAG, "loadDictionaryList: called")
@@ -469,6 +507,38 @@ object SettingsDictionaryScreen : SearchableSettings {
         val fieldMap = remember(fieldMapJson) {
             AnkiCardCreator.parseFieldMap(fieldMapJson)
         }
+        val customFieldNames by remember(fieldMap, modelFields) {
+            derivedStateOf {
+                fieldMap.keys
+                    .filter { mappedField -> modelFields.none { it.equals(mappedField, ignoreCase = true) } }
+                    .sorted()
+            }
+        }
+        var fieldMappingExpanded by remember { mutableStateOf(true) }
+        var newCustomFieldName by remember { mutableStateOf("") }
+
+        val setFieldValue: (String, String, Boolean) -> Unit = { fieldName, newDisplayValue, keepEmpty ->
+            val normalizedName = fieldName.trim()
+            if (normalizedName.isNotBlank()) {
+                val updated = fieldMap.toMutableMap()
+                if (newDisplayValue.isBlank()) {
+                    if (keepEmpty) {
+                        updated[normalizedName] = ""
+                    } else {
+                        updated.remove(normalizedName)
+                    }
+                } else {
+                    updated[normalizedName] = convertToStorageFormat(newDisplayValue)
+                }
+                fieldMapPref.set(org.json.JSONObject(updated).toString())
+            }
+        }
+
+        val removeCustomField: (String) -> Unit = { fieldName ->
+            val updated = fieldMap.toMutableMap()
+            updated.remove(fieldName)
+            fieldMapPref.set(org.json.JSONObject(updated).toString())
+        }
 
         // Check AnkiDroid status whenever screen is visible and enabled
         LaunchedEffect(enabled, selectedModel) {
@@ -508,14 +578,16 @@ object SettingsDictionaryScreen : SearchableSettings {
             if (selectedModel.isNotBlank() && ankiInstalled == true && bridge.hasPermission()) {
                 modelFields = bridge.modelFieldNames(selectedModel)
 
-                // Auto-detect field mappings and save immediately (overwrite)
-                val detectedMap = modelFields.mapIndexedNotNull { index, fieldName ->
-                    val marker = Marker.autoDetect(fieldName, index)
-                    if (marker != null) fieldName to "{$marker}" else null
-                }.toMap()
+                // Only auto-detect if field map is empty (first-time setup)
+                if (fieldMapJson.isBlank() || fieldMapJson == "{}") {
+                    val detectedMap = modelFields.mapIndexedNotNull { index, fieldName ->
+                        val marker = Marker.autoDetect(fieldName, index)
+                        if (marker != null) fieldName to "{$marker}" else null
+                    }.toMap()
 
-                if (detectedMap.isNotEmpty()) {
-                    fieldMapPref.set(org.json.JSONObject(detectedMap).toString())
+                    if (detectedMap.isNotEmpty()) {
+                        fieldMapPref.set(org.json.JSONObject(detectedMap).toString())
+                    }
                 }
             }
         }
@@ -609,50 +681,98 @@ object SettingsDictionaryScreen : SearchableSettings {
                             )
 
                             // Field mapping
-                            if (modelFields.isNotEmpty()) {
-                                var fieldMappingExpanded by remember { mutableStateOf(true) }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { fieldMappingExpanded = !fieldMappingExpanded }
+                                    .padding(top = 4.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = stringResource(MR.strings.pref_anki_field_mapping),
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                    Icon(
+                                        imageVector = if (fieldMappingExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                        contentDescription = if (fieldMappingExpanded) "Collapse" else "Expand",
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
 
-                                Column(
+                            if (fieldMappingExpanded) {
+                                if (selectedModel.isNotBlank() && modelFields.isEmpty() && ankiInstalled == true) {
+                                    Text(
+                                        text = "Loading model fields...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+
+                                modelFields.forEach { fieldName ->
+                                    val storageValue = fieldMap[fieldName] ?: ""
+                                    val displayValue = storageValue.replace("<br>", "")
+                                    AnkiFieldMappingRow(
+                                        fieldName = fieldName,
+                                        fieldValue = displayValue,
+                                        onValueChange = { newDisplayValue ->
+                                            setFieldValue(fieldName, newDisplayValue, false)
+                                        },
+                                    )
+                                }
+
+                                if (customFieldNames.isNotEmpty()) {
+                                    Text(
+                                        text = "Custom fields",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 8.dp),
+                                    )
+                                }
+
+                                customFieldNames.forEach { fieldName ->
+                                    val storageValue = fieldMap[fieldName] ?: ""
+                                    val displayValue = storageValue.replace("<br>", "")
+                                    AnkiFieldMappingRow(
+                                        fieldName = fieldName,
+                                        fieldValue = displayValue,
+                                        onValueChange = { newDisplayValue ->
+                                            setFieldValue(fieldName, newDisplayValue, true)
+                                        },
+                                        onDeleteField = {
+                                            removeCustomField(fieldName)
+                                        },
+                                    )
+                                }
+
+                                OutlinedTextField(
+                                    value = newCustomFieldName,
+                                    onValueChange = { newCustomFieldName = it },
+                                    label = { Text("Add custom field") },
+                                    singleLine = true,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { fieldMappingExpanded = !fieldMappingExpanded }
-                                        .padding(top = 4.dp),
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = stringResource(MR.strings.pref_anki_field_mapping),
-                                            style = MaterialTheme.typography.titleSmall,
-                                        )
-                                        Icon(
-                                            imageVector = if (fieldMappingExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                            contentDescription = if (fieldMappingExpanded) "Collapse" else "Expand",
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
+                                        .padding(top = 8.dp),
+                                )
 
-                                    if (fieldMappingExpanded) {
-                                        modelFields.forEach { fieldName ->
-                                            val storageValue = fieldMap[fieldName] ?: ""
-                                            val displayValue = storageValue.replace("<br>", "")
-                                            AnkiFieldMappingRow(
-                                                fieldName = fieldName,
-                                                fieldValue = displayValue,
-                                                onValueChange = { newDisplayValue ->
-                                                    val updated = fieldMap.toMutableMap()
-                                                    if (newDisplayValue.isEmpty()) {
-                                                        updated.remove(fieldName)
-                                                    } else {
-                                                        updated[fieldName] = convertToStorageFormat(newDisplayValue)
-                                                    }
-                                                    fieldMapPref.set(org.json.JSONObject(updated).toString())
-                                                },
-                                            )
+                                TextButton(
+                                    onClick = {
+                                        val candidate = newCustomFieldName.trim()
+                                        val alreadyExists = (modelFields + customFieldNames)
+                                            .any { it.equals(candidate, ignoreCase = true) }
+                                        if (candidate.isBlank() || alreadyExists) {
+                                            return@TextButton
                                         }
-                                    }
+                                        setFieldValue(candidate, "", true)
+                                        newCustomFieldName = ""
+                                    },
+                                    modifier = Modifier.align(Alignment.End),
+                                ) {
+                                    Text("Add field")
                                 }
                             }
 
@@ -764,6 +884,7 @@ object SettingsDictionaryScreen : SearchableSettings {
         fieldName: String,
         fieldValue: String,
         onValueChange: (String) -> Unit,
+        onDeleteField: (() -> Unit)? = null,
     ) {
         var dropdownExpanded by remember { mutableStateOf(false) }
         val currentMarkers = remember(fieldValue) { parseMarkersForDisplay(fieldValue) }
@@ -773,16 +894,35 @@ object SettingsDictionaryScreen : SearchableSettings {
                 .fillMaxWidth()
                 .padding(vertical = 4.dp),
         ) {
-            Text(
-                text = fieldName,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = fieldName,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (onDeleteField != null) {
+                    IconButton(
+                        onClick = onDeleteField,
+                        modifier = Modifier.size(24.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "Remove field",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
 
             Box {
                 OutlinedTextField(
                     value = fieldValue,
                     onValueChange = { newValue ->
-                        onValueChange(convertToStorageFormat(newValue))
+                        onValueChange(newValue)
                     },
                     placeholder = { Text("", style = MaterialTheme.typography.bodySmall) },
                     modifier = Modifier
@@ -817,7 +957,7 @@ object SettingsDictionaryScreen : SearchableSettings {
                     DropdownMenuItem(
                         text = {
                             Text(
-                                text = markerChipLabel(marker),
+                                text = markerDisplayLabels[marker] ?: marker,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         },
@@ -856,43 +996,6 @@ object SettingsDictionaryScreen : SearchableSettings {
         val markers = parseMarkersForDisplay(displayValue)
         if (markers.isEmpty()) return displayValue
         return markers.joinToString("<br>") { "{$it}" }
-    }
-
-    private fun markerChipLabel(marker: String): String {
-        val isTodo = marker in Marker.TODO_MARKERS
-        val prefix = if (isTodo) "[TODO] " else ""
-        return when (marker) {
-            Marker.EXPRESSION -> "${prefix}Expression"
-            Marker.READING -> "${prefix}Reading"
-            Marker.FURIGANA -> "${prefix}Furigana"
-            Marker.FURIGANA_PLAIN -> "${prefix}Furigana Plain"
-            Marker.GLOSSARY -> "${prefix}Glossary"
-            Marker.GLOSSARY_BRIEF -> "${prefix}Glossary Brief"
-            Marker.GLOSSARY_PLAIN -> "${prefix}Glossary Plain"
-            Marker.GLOSSARY_NO_DICT -> "${prefix}Glossary No Dict"
-            Marker.GLOSSARY_FIRST -> "${prefix}Glossary First"
-            Marker.GLOSSARY_FIRST_BRIEF -> "${prefix}Glossary First Brief"
-            Marker.SENTENCE -> "${prefix}Sentence"
-            Marker.CLOZE_PREFIX -> "${prefix}Cloze Prefix"
-            Marker.CLOZE_BODY -> "${prefix}Cloze Body"
-            Marker.CLOZE_BODY_KANA -> "${prefix}Cloze Body Kana"
-            Marker.CLOZE_SUFFIX -> "${prefix}Cloze Suffix"
-            Marker.TAGS -> "${prefix}Tags"
-            Marker.PART_OF_SPEECH -> "${prefix}Part of Speech"
-            Marker.CONJUGATION -> "${prefix}Conjugation"
-            Marker.DICTIONARY -> "${prefix}Dictionary"
-            Marker.DICTIONARY_ALIAS -> "${prefix}Dictionary Alias"
-            Marker.FREQUENCIES -> "${prefix}Frequencies"
-            Marker.FREQUENCY_HARMONIC_RANK -> "${prefix}Freq Harmonic"
-            Marker.FREQUENCY_AVERAGE_RANK -> "${prefix}Freq Average"
-            Marker.PITCH_ACCENTS -> "${prefix}Pitch Accents"
-            Marker.PITCH_ACCENT_POSITIONS -> "${prefix}Pitch Positions"
-            Marker.PITCH_ACCENT_CATEGORIES -> "${prefix}Pitch Categories"
-            Marker.AUDIO -> "${prefix}Audio"
-            Marker.SCREENSHOT -> "${prefix}Screenshot"
-            Marker.SEARCH_QUERY -> "${prefix}Search Query"
-            else -> marker
-        }
     }
 }
 

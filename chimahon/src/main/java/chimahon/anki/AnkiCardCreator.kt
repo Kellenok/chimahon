@@ -362,7 +362,47 @@ object AnkiCardCreator {
         Marker.AUDIO -> ""
         Marker.SCREENSHOT -> ""
         Marker.SEARCH_QUERY -> result.term.expression
-        else -> ""
+        else -> parseSingleGlossaryMarker(marker, result)
+    }
+
+    // =============================================================================
+    // Single glossary marker parsing (Yomitan-style)
+    // =============================================================================
+
+    private fun parseSingleGlossaryMarker(marker: String, result: LookupResult): String {
+        val prefix = "single-glossary-"
+        if (!marker.startsWith(prefix)) return ""
+
+        val rest = marker.substring(prefix.length)
+        if (rest.isBlank()) return ""
+
+        val tokens = rest.split("-").toMutableList()
+        var hasBrief = false
+        var hasFirst = false
+        while (tokens.isNotEmpty()) {
+            when (tokens.last().lowercase()) {
+                "brief" -> {
+                    hasBrief = true
+                    tokens.removeAt(tokens.lastIndex)
+                }
+                "first" -> {
+                    hasFirst = true
+                    tokens.removeAt(tokens.lastIndex)
+                }
+                else -> break
+            }
+        }
+
+        val dictName = tokens.joinToString("-").trim()
+        if (dictName.isEmpty()) return ""
+
+        return buildGlossary(
+            result.term.glossaries,
+            brief = hasBrief,
+            noDictTag = false,
+            firstOnly = hasFirst,
+            dictionaryFilter = dictName,
+        )
     }
 
     // =============================================================================
@@ -458,9 +498,18 @@ object AnkiCardCreator {
         brief: Boolean,
         noDictTag: Boolean,
         firstOnly: Boolean,
+        dictionaryFilter: String? = null,
     ): String {
         if (glossaries.isEmpty()) return ""
-        val entries = if (firstOnly) arrayOf(glossaries[0]) else glossaries
+
+        val filteredGlossaries = if (dictionaryFilter != null) {
+            glossaries.filter { it.dictName.contains(dictionaryFilter, ignoreCase = true) }.toTypedArray()
+        } else {
+            glossaries
+        }
+
+        if (filteredGlossaries.isEmpty()) return ""
+        val entries = if (firstOnly) arrayOf(filteredGlossaries[0]) else filteredGlossaries
 
         val sb = StringBuilder()
         sb.append("""<div style="text-align: left;" class="yomitan-glossary">""")
@@ -524,11 +573,19 @@ object AnkiCardCreator {
     // Structured-content → HTML
     // =============================================================================
 
+    private fun normalizePlainText(text: String): String = text
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\\n", "\n")
+
+    private fun escapeHtmlWithLineBreaks(text: String): String = escapeHtml(normalizePlainText(text))
+        .replace("\n", "<br>")
+
     private fun glossaryToHtml(raw: String, dictionary: String = ""): String {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return ""
         if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-            return escapeHtml(trimmed)
+            return escapeHtmlWithLineBreaks(trimmed)
         }
         return try {
             when {
@@ -536,17 +593,21 @@ object AnkiCardCreator {
                 else -> objectToHtml(JSONObject(trimmed), dictionary)
             }
         } catch (_: Exception) {
-            escapeHtml(trimmed)
+            escapeHtmlWithLineBreaks(trimmed)
         }
     }
 
     private fun glossaryToPlainText(raw: String): String {
         val html = glossaryToHtml(raw)
-        return html
+        val text = html
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</(p|li|div|tr|h[1-6])>"), "\n")
             .replace(Regex("<[^>]+>"), " ")
             .replace("&lt;", "<").replace("&gt;", ">")
             .replace("&amp;", "&").replace("&quot;", "\"")
-            .replace(Regex("\\s{2,}"), " ")
+        return text
+            .split('\n')
+            .joinToString("\n") { line -> line.replace(Regex("[ \\t\\u000B\\u000C]+"), " ").trim() }
             .trim()
     }
 
@@ -555,9 +616,9 @@ object AnkiCardCreator {
 
         val allStrings = (0 until arr.length()).all { arr.get(it) is String }
         if (allStrings) {
-            if (arr.length() == 1) return escapeHtml(arr.getString(0))
+            if (arr.length() == 1) return contentValueToHtml(arr.getString(0), dictionary)
             return "<ul>" + (0 until arr.length()).joinToString("") {
-                "<li>${escapeHtml(arr.getString(it))}</li>"
+                "<li>${contentValueToHtml(arr.getString(it), dictionary)}</li>"
             } + "</ul>"
         }
 
@@ -636,7 +697,7 @@ object AnkiCardCreator {
 
     private fun contentValueToHtml(value: Any?, dictionary: String): String = when (value) {
         null -> ""
-        is String -> escapeHtml(value)
+        is String -> escapeHtmlWithLineBreaks(value)
         is Number -> value.toString()
         is Boolean -> value.toString()
         is JSONArray -> arrayToHtml(value, dictionary)
@@ -738,21 +799,24 @@ object AnkiCardCreator {
     // =============================================================================
 
     private fun buildFrequenciesList(result: LookupResult): String {
-        val freqs = result.term.frequencies
-        if (freqs.isEmpty()) return ""
-        val sb = StringBuilder("""<ul style="text-align: left;">""")
-        for (group in freqs) {
-            for (f in group.frequencies) {
-                sb.append("<li>")
-                if (group.dictName.isNotBlank()) {
-                    sb.append("${escapeHtml(group.dictName)}: ")
+        return selectLowestFrequencyValue(result) ?: ""
+    }
+
+    private fun selectLowestFrequencyValue(result: LookupResult): String? {
+        var bestValue: Int? = null
+        var bestDisplayValue: String? = null
+
+        for (group in result.term.frequencies) {
+            for (frequency in group.frequencies) {
+                if (frequency.value <= 0) continue
+                if (bestValue == null || frequency.value < bestValue) {
+                    bestValue = frequency.value
+                    bestDisplayValue = frequency.displayValue.takeIf { it.isNotBlank() }
                 }
-                sb.append(escapeHtml(f.value.toString()))
-                sb.append("</li>")
             }
         }
-        sb.append("</ul>")
-        return sb.toString()
+
+        return bestDisplayValue ?: bestValue?.toString()
     }
 
     private fun buildFrequencyHarmonicRank(result: LookupResult): String {

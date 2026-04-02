@@ -27,8 +27,8 @@ class DictionaryRepository(
             HoshiDicts.rebuildQuery(
                 session = activeSession,
                 termPaths = termPaths.toTypedArray(),
-                freqPaths = emptyArray(),
-                pitchPaths = emptyArray(),
+                freqPaths = termPaths.toTypedArray(),
+                pitchPaths = termPaths.toTypedArray(),
             )
             cachedStyles = HoshiDicts.getStyles(activeSession).toList()
             configuredTermPaths = termPaths

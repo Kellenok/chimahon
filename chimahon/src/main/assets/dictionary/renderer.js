@@ -521,6 +521,25 @@
     }
   }
 
+  function normalizePlainText(text) {
+    return String(text)
+      .replace(/\r\n?/g, '\n')
+      .replace(/\\n/g, '\n');
+  }
+
+  function appendTextWithLineBreaks(parent, text) {
+    const normalized = normalizePlainText(text);
+    const parts = normalized.split('\n');
+    for (let i = 0; i < parts.length; i += 1) {
+      if (i > 0) {
+        parent.appendChild(document.createElement('br'));
+      }
+      if (parts[i].length > 0) {
+        parent.appendChild(document.createTextNode(parts[i]));
+      }
+    }
+  }
+
   function mediaCandidates(path) {
     const list = new Set();
     const add = (value) => {
@@ -567,15 +586,25 @@
     return span;
   }
 
+  function createTagWithBody(label, body, category) {
+    const span = createTag(label, category);
+    const bodyNode = document.createElement('span');
+    bodyNode.className = 'tag-body';
+    bodyNode.textContent = body;
+    span.appendChild(bodyNode);
+    return span;
+  }
+
   function buildGlossaryNode(rawGlossary, dictName, mediaMap) {
     const parsed = parseMaybeJson(rawGlossary);
     if (parsed === null) {
       const span = document.createElement('span');
       span.className = 'gloss-plain-text';
-      if (containsJapaneseText(rawGlossary)) {
+      const normalized = normalizePlainText(rawGlossary);
+      if (containsJapaneseText(normalized)) {
         span.lang = 'ja';
       }
-      span.textContent = rawGlossary;
+      appendTextWithLineBreaks(span, normalized);
       return span;
     }
     return renderStructured(parsed, dictName, mediaMap);
@@ -821,7 +850,7 @@
     if (content === null || typeof content === 'undefined') return;
 
     if (typeof content === 'string' || typeof content === 'number' || typeof content === 'boolean') {
-      parent.appendChild(document.createTextNode(String(content)));
+      appendTextWithLineBreaks(parent, content);
       return;
     }
 
@@ -833,7 +862,7 @@
         ul.classList.add('glossary-list');
         content.forEach((child) => {
           const li = document.createElement('li');
-          li.appendChild(document.createTextNode(child));
+          appendTextWithLineBreaks(li, child);
           ul.appendChild(li);
         });
         parent.appendChild(ul);
@@ -1002,21 +1031,35 @@
   }
 
   function appendInflectionSection(body, rules, process) {
-    if (!rules && !process) return;
+    if (!process) return;
 
+    const container = document.createElement('div');
+    container.className = 'inflection-toggle';
+    container.style.cssText = 'font-size: 0.85em; opacity: 0.7; cursor: pointer; margin: 4px 0; user-select: none;';
+
+    const toggle = document.createElement('span');
+    toggle.textContent = 'Deinflection ▸';
+    container.appendChild(toggle);
+
+    const details = document.createElement('div');
+    details.className = 'inflection-details';
+    details.style.display = 'none';
     const chains = document.createElement('ul');
     chains.className = 'inflection-rule-chains';
-    if (rules) {
-      const li = document.createElement('li');
-      li.textContent = rules;
-      chains.appendChild(li);
-    }
-    if (process) {
-      const li = document.createElement('li');
-      li.textContent = process;
-      chains.appendChild(li);
-    }
-    body.appendChild(chains);
+    const li = document.createElement('li');
+    li.textContent = process;
+    chains.appendChild(li);
+    details.appendChild(chains);
+
+    let expanded = false;
+    container.onclick = () => {
+      expanded = !expanded;
+      details.style.display = expanded ? 'block' : 'none';
+      toggle.textContent = expanded ? 'Deinflection ▾' : 'Deinflection ▸';
+    };
+
+    container.appendChild(details);
+    body.appendChild(container);
   }
 
   function createDefinitionItem(glossary, mediaMap) {
@@ -1029,10 +1072,6 @@
     tags.className = 'definition-tag-list';
 
     if (glossary.dictName) tags.appendChild(createTag(glossary.dictName, 'dictionary'));
-    if (glossary.termTags) {
-      String(glossary.termTags).split(',').map((s) => s.trim()).filter(Boolean)
-        .forEach((tag) => tags.appendChild(createTag(tag, 'partOfSpeech')));
-    }
     if (glossary.definitionTags) {
       String(glossary.definitionTags).split(',').map((s) => s.trim()).filter(Boolean)
         .forEach((tag) => tags.appendChild(createTag(tag, 'default')));
@@ -1064,6 +1103,9 @@
   function appendFrequenciesSection(body, frequencies, showHarmonic) {
     if (frequencies.length === 0) return;
 
+    const section = document.createElement('div');
+    section.className = 'entry-body-section frequency-top-section';
+
     // If showHarmonic is true, calculate and display harmonic mean instead of full list
     if (showHarmonic) {
       const numbers = [];
@@ -1087,48 +1129,37 @@
           harmonic += 1 / num;
         }
         harmonic = Math.floor(n / harmonic);
-        
-        const section = document.createElement('div');
-        section.className = 'entry-body-section';
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.setAttribute('data-category', 'frequency');
-        tag.innerHTML = '<span class="tag-label">freq</span><span class="tag-body">harmonic: ' + harmonic + '</span>';
+
+        const tag = createTagWithBody('freq', `harmonic: ${harmonic}`, 'frequency');
         section.appendChild(tag);
         body.appendChild(section);
       }
       return;
     }
 
-    // Default: show full frequency list
-    const section = document.createElement('div');
-    section.className = 'entry-body-section';
-    const list = document.createElement('ol');
-    list.className = 'frequency-group-list';
-
+    // Default: show compact top-row chips like Yomitan frequency groups.
     for (const group of frequencies) {
-      const li = document.createElement('li');
-      li.className = 'frequency-group-item';
-
-      li.appendChild(createTag(String(group.dictName || ''), 'frequency'));
-
-      const span = document.createElement('span');
+      const dictName = String(group.dictName || '').trim();
       const items = Array.isArray(group.frequencies) ? group.frequencies : [];
+      const values = [];
       items.forEach((item, idx) => {
         const value = item && item.displayValue ? item.displayValue : String(item && item.value ? item.value : '');
-        const itemNode = document.createElement('span');
-        itemNode.className = 'frequency-item';
-        itemNode.textContent = value;
-        span.appendChild(itemNode);
-        if (idx !== items.length - 1) span.appendChild(document.createTextNode(' '));
+        if (value) {
+          values.push(value);
+        }
       });
 
-      li.appendChild(span);
-      list.appendChild(li);
+      if (!dictName || values.length === 0) {
+        continue;
+      }
+
+      const chip = createTagWithBody(dictName, values.join(', '), 'frequency');
+      section.appendChild(chip);
     }
 
-    section.appendChild(list);
-    body.appendChild(section);
+    if (section.childElementCount > 0) {
+      body.appendChild(section);
+    }
   }
 
   function appendPitchesSection(body, pitches) {
@@ -1196,15 +1227,15 @@
 
     body.appendChild(headSection);
 
+    const frequencies = result.term && Array.isArray(result.term.frequencies) ? result.term.frequencies : [];
+    appendFrequenciesSection(body, frequencies, showFrequencyHarmonic);
+
     const rules = result.term && result.term.rules ? result.term.rules : '';
     const process = Array.isArray(result.process) ? result.process.join(' -> ') : '';
     appendInflectionSection(body, rules, process);
 
     const glossaries = (result.term && Array.isArray(result.term.glossaries)) ? result.term.glossaries : [];
     appendDefinitionsSection(body, glossaries, mediaMap);
-
-    const frequencies = result.term && Array.isArray(result.term.frequencies) ? result.term.frequencies : [];
-    appendFrequenciesSection(body, frequencies, showFrequencyHarmonic);
 
     const pitches = result.term && Array.isArray(result.term.pitches) ? result.term.pitches : [];
     appendPitchesSection(body, pitches);
