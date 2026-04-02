@@ -15,6 +15,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.annotation.AttrRes
@@ -48,7 +49,6 @@ import eu.kanade.tachiyomi.data.coil.customDecoder
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences.LandscapeZoomScaleType
 import eu.kanade.tachiyomi.ui.dictionary.getDictionaryBootstrapHtml
 import eu.kanade.tachiyomi.ui.dictionary.getDictionaryPaths
-import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
 import logcat.LogPriority
@@ -331,10 +331,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
         if (pageView is SubsamplingScaleImageView) return
         removeView(pageView)
 
-        pageView = if (isWebtoon) {
-            WebtoonSubsamplingImageView(context)
-        } else {
-            OcrSubsamplingImageView(context).also { it.ocrHost = this@ReaderPageImageView }
+        pageView = OcrSubsamplingImageView(context).also {
+            it.ocrHost = this@ReaderPageImageView
+            it.forwardTouchToSuper = !isWebtoon
         }.apply {
             setMaxTileSize(ImageUtil.hardwareBitmapThreshold)
             setDoubleTapZoomStyle(SubsamplingScaleImageView.ZOOM_FOCUS_CENTER)
@@ -353,10 +352,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
             )
             setOnClickListener { this@ReaderPageImageView.onViewClicked() }
         }
-        addView(pageView, MATCH_PARENT, MATCH_PARENT)
+        // In webtoon mode, use WRAP_CONTENT height to respect image dimensions
+        // In paged mode, use MATCH_PARENT to fill the pager
+        val ssivWidth = MATCH_PARENT
+        val ssivHeight = if (isWebtoon) WRAP_CONTENT else MATCH_PARENT
+        addView(pageView, ssivWidth, ssivHeight)
 
-        // Pre-warm WebView for OCR dictionary lookup (non-webtoon only)
-        if (!isWebtoon && ocrWebView == null) {
+        // Pre-warm WebView for OCR dictionary lookup in both reader modes.
+        if (ocrWebView == null) {
             ocrWebView = createOcrWebView(context)
             dictionaryRepository = DictionaryRepository(context.getExternalFilesDir(null))
         }
@@ -616,10 +619,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
             (pageView as? SubsamplingScaleImageView)?.invalidate()
             true
         } else if (currentActive != block) {
-            // Do not switch directly to a different block while one is active.
-            // This avoids accidental jumps when OCR boxes overlap or split badly.
-            logcat { "OCR tap on different block while active; dismissing active block" }
-            dismissActiveOcrBlock()
+            // Fast switch: replace active block immediately when tapping another one.
+            logcat { "OCR tap on different block while active; switching active block" }
+            activeOcrBlock = block
+            ocrLayoutCache = null
+            ocrPopupLookupString = null
+            (pageView as? SubsamplingScaleImageView)?.invalidate()
             true
         } else {
             // Second tap on active block -> show dictionary popup

@@ -547,13 +547,25 @@ class ReaderActivity : BaseActivity() {
             )
         }
 
-        // Set up OCR popup callback on the pager viewer
-        (viewModel.state.value.viewer as? PagerViewer)?.let { pager ->
-            if (pager.onShowOcrPopup == null) {
-                pager.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY ->
-                    runOnUiThread {
-                        ocrPopupState =
-                            OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY)
+        // Set up OCR popup callback on the active reader viewer.
+        when (val viewer = viewModel.state.value.viewer) {
+            is PagerViewer -> {
+                if (viewer.onShowOcrPopup == null) {
+                    viewer.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY ->
+                        runOnUiThread {
+                            ocrPopupState =
+                                OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY)
+                        }
+                    }
+                }
+            }
+            is WebtoonViewer -> {
+                if (viewer.onShowOcrPopup == null) {
+                    viewer.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY ->
+                        runOnUiThread {
+                            ocrPopupState =
+                                OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY)
+                        }
                     }
                 }
             }
@@ -771,7 +783,10 @@ class ReaderActivity : BaseActivity() {
             ocrEnabled = ocrEnabled,
             onToggleOcr = {
                 val enabled = viewModel.toggleOcrEnabled()
-                (state.viewer as? PagerViewer)?.setOcrEnabled(enabled)
+                when (val viewer = state.viewer) {
+                    is PagerViewer -> viewer.setOcrEnabled(enabled)
+                    is WebtoonViewer -> viewer.setOcrEnabled(enabled)
+                }
                 menuToggleToast?.cancel()
                 menuToggleToast = toast(
                     if (enabled) MR.strings.action_enable_ocr else MR.strings.action_disable_ocr,

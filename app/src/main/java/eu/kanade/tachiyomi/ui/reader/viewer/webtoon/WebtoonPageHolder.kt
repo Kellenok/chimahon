@@ -15,6 +15,7 @@ import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -84,12 +85,17 @@ class WebtoonPageHolder(
      */
     private var loadJob: Job? = null
 
+    private var ocrLoadJob: Job? = null
+
     init {
         refreshLayoutParams()
 
         frame.onImageLoaded = { onImageDecoded() }
         frame.onImageLoadError = { error -> setError(error) }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
+        frame.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY ->
+            viewer.onShowOcrPopup?.invoke(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY)
+        }
     }
 
     /**
@@ -120,8 +126,11 @@ class WebtoonPageHolder(
     override fun recycle() {
         loadJob?.cancel()
         loadJob = null
+        ocrLoadJob?.cancel()
+        ocrLoadJob = null
 
         removeErrorLayout()
+        frame.clearOcr()
         frame.recycle()
         progressIndicator.setProgress(0)
         progressContainer.isVisible = true
@@ -205,7 +214,11 @@ class WebtoonPageHolder(
                     isAnimated,
                     ReaderPageImageView.Config(
                         zoomDuration = viewer.config.doubleTapAnimDuration,
-                        minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
+                        minimumScaleType = if (viewer.config.webtoonScaleType == ReaderPreferences.WebtoonScaleType.FIT) {
+                            SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE
+                        } else {
+                            SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH
+                        },
                         cropBorders =
                         (viewer.config.imageCropBorders && viewer.isContinuous) ||
                             (viewer.config.continuousCropBorders && !viewer.isContinuous),
@@ -261,6 +274,31 @@ class WebtoonPageHolder(
     private fun onImageDecoded() {
         progressContainer.isVisible = false
         removeErrorLayout()
+        applyOcrEnabled(viewer.activity.viewModel.isOcrEnabled())
+    }
+
+    fun applyOcrEnabled(enabled: Boolean) {
+        frame.ocrOutlineVisible = viewer.activity.viewModel.isOcrOutlineVisible()
+        frame.ocrBoxScale = viewer.activity.viewModel.getOcrBoxScale()
+        frame.ocrEnabled = enabled
+        if (!enabled) {
+            ocrLoadJob?.cancel()
+            ocrLoadJob = null
+            frame.clearOcr()
+            return
+        }
+
+        if (frame.ocrBlocks.isNotEmpty()) {
+            return
+        }
+
+        val targetPage = page ?: return
+        ocrLoadJob?.cancel()
+        ocrLoadJob = scope.launch {
+            logcat { "OCR request start (webtoon): chapter=${targetPage.chapter.chapter.id} page=${targetPage.index}" }
+            val blocks = viewer.activity.viewModel.getOcrBlocks(targetPage)
+            frame.setOcrBlocks(blocks)
+        }
     }
 
     /**

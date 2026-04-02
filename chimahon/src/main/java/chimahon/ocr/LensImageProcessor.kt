@@ -87,8 +87,8 @@ private fun bitmapToPng(bitmap: Bitmap): ByteArray {
 
 /**
  * Dual-strategy image preparation:
- * - Normal pages (aspect ≤ 3:1): resize proportional to 3MP (owocr approach, full-page context)
- * - Extreme webtoon strips (aspect > 3:1 AND > 3MP): chunk at native resolution
+ * - Regular pages: resize proportional to 3MP (owocr approach, full-page context)
+ * - Very tall or extreme strips: chunk at native resolution in 3000px bands
  */
 internal fun prepareForOcr(data: ByteArray): List<ImageChunk> {
     val bitmap = decodeBitmap(data)
@@ -96,9 +96,11 @@ internal fun prepareForOcr(data: ByteArray): List<ImageChunk> {
     val h = bitmap.height
     val pixelCount = w * h
     val aspectRatio = h.toDouble() / w
+    val shouldChunkByHeight = h > TALL_IMAGE_CHUNK_THRESHOLD
+    val shouldChunkByAspect = aspectRatio > WEBTOON_ASPECT_RATIO && pixelCount > MAX_TOTAL_PIXELS
 
-    return if (aspectRatio > WEBTOON_ASPECT_RATIO && pixelCount > MAX_TOTAL_PIXELS) {
-        // Extreme webtoon: chunk at native resolution
+    return if (shouldChunkByHeight || shouldChunkByAspect) {
+        // Chunk only outlier pages to keep regular pages on the fast single-image path.
         chunkImage(bitmap)
     } else {
         // Normal page: resize proportional to 3MP, send as single chunk
@@ -140,12 +142,14 @@ internal fun resizeToMaxPixels(bitmap: Bitmap, maxTotalPixels: Int): Bitmap {
 internal fun chunkImage(
     bitmap: Bitmap,
     chunkHeightLimit: Int = CHUNK_HEIGHT_LIMIT,
+    chunkOverlapPx: Int = CHUNK_OVERLAP_PX,
 ): List<ImageChunk> {
     val fullWidth = bitmap.width
     val fullHeight = bitmap.height
     val chunks = mutableListOf<ImageChunk>()
 
     try {
+        val step = (chunkHeightLimit - chunkOverlapPx).coerceAtLeast(1)
         var currentY = 0
         while (currentY < fullHeight) {
             val currentChunkHeight = min(chunkHeightLimit, fullHeight - currentY)
@@ -164,7 +168,7 @@ internal fun chunkImage(
             } finally {
                 chunkBitmap.recycle()
             }
-            currentY += chunkHeightLimit
+            currentY += step
         }
     } finally {
         bitmap.recycle()

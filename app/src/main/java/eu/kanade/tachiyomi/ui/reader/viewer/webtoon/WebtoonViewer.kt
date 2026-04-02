@@ -14,11 +14,13 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.WebtoonLayoutManager
+import chimahon.DictionaryRepository
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import android.webkit.WebView
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
@@ -46,6 +48,18 @@ class WebtoonViewer(
 ) : Viewer {
 
     val downloadManager: DownloadManager by injectLazy()
+
+    var onShowOcrPopup: (
+        (
+            lookupString: String,
+            fullText: String,
+            charOffset: Int,
+            webView: WebView,
+            repository: DictionaryRepository,
+            anchorX: Float,
+            anchorY: Float,
+        ) -> Unit
+    )? = null
 
     private val scope = MainScope()
 
@@ -386,6 +400,16 @@ class WebtoonViewer(
             recycler.smoothScrollBy(0, scrollDistance)
         } else {
             recycler.scrollBy(0, scrollDistance)
+        }
+    }
+
+    fun setOcrEnabled(enabled: Boolean) {
+        for (index in 0 until recycler.childCount) {
+            val child = recycler.getChildAt(index)
+            val holder = recycler.getChildViewHolder(child)
+            if (holder is WebtoonPageHolder) {
+                holder.applyOcrEnabled(enabled)
+            }
         }
     }
 

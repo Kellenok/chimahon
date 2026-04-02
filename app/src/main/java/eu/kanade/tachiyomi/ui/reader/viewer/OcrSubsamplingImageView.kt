@@ -10,8 +10,11 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.Pager
+import kotlin.math.abs
 
 /**
  * OCR-aware subclass of [SubsamplingScaleImageView].
@@ -41,6 +44,19 @@ class OcrSubsamplingImageView(
     private val gestureDetector = GestureDetector(context, OcrGestureListener())
     private var pagerGestureSuppressed = false
 
+    // Cache hit test result to avoid redundant calculations during a single gesture
+    private var cachedHitBlock: OcrTextBlock? = null
+    private var cachedHitX = Float.NaN
+    private var cachedHitY = Float.NaN
+    private var suppressSuperForGesture = false
+    private var downOnOcrBox = false
+    private var downX = 0f
+    private var downY = 0f
+    private var swipeReleased = false
+
+    // Webtoon mode keeps scroll/zoom gestures in RecyclerView instead of SSIV.
+    var forwardTouchToSuper: Boolean = true
+
     // Text paint for rendering OCR text
     private val textPaint = TextPaint().apply {
         isAntiAlias = true
@@ -58,7 +74,7 @@ class OcrSubsamplingImageView(
     private val backgroundPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.FILL
-        color = Color.argb(180, 255, 255, 200)
+        color = Color.argb(180, 255, 255, 255)
     }
 
     // ==================== Rendering ====================
@@ -367,35 +383,109 @@ class OcrSubsamplingImageView(
         return layout
     }
 
+    private fun getParentScaleCompensation(): Float {
+        // Webtoon can apply parent RecyclerView scaling; compensate OCR text size so rendering
+        // remains comparable to paged mode at the same visual zoom.
+        if (forwardTouchToSuper) return 1f
+
+        var accumulatedScale = 1f
+        var current: View? = this
+        while (true) {
+            val view = current ?: break
+            val sx = abs(view.scaleX).coerceAtLeast(0.01f)
+            val sy = abs(view.scaleY).coerceAtLeast(0.01f)
+            accumulatedScale *= minOf(sx, sy)
+            current = view.parent as? View
+        }
+
+        return (1f / accumulatedScale).coerceIn(1f, 2f)
+    }
+
     // ==================== Touch Handling ====================
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_DOWN && ocrHost?.ocrEnabled == true) {
-            if (hitTestSource(event.x, event.y) != null) {
+        val host = ocrHost
+        val ocrEnabled = host?.ocrEnabled == true
+        val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            suppressSuperForGesture = false
+            downOnOcrBox = false
+            swipeReleased = false
+        }
+        
+        // On ACTION_DOWN, check if we hit an OCR block and cache the result
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && ocrEnabled) {
+            cachedHitBlock = hitTestSource(event.x, event.y)
+            cachedHitX = event.x
+            cachedHitY = event.y
+            downX = event.x
+            downY = event.y
+            downOnOcrBox = cachedHitBlock != null
+            // OCR box taps should never trigger SSIV click/zoom/page flip.
+            suppressSuperForGesture = downOnOcrBox
+
+            // Dismiss active block immediately when touching outside it.
+            // This avoids waiting for single-tap confirmation and makes swipe/press feel instant.
+            if (cachedHitBlock == null && host?.activeOcrBlock != null) {
+                host.dismissActiveOcrBlock()
+            }
+
+            if (downOnOcrBox) {
+                // Temporarily capture while we decide tap vs swipe.
                 parent?.requestDisallowInterceptTouchEvent(true)
-                findParentPager()?.setGestureDetectorEnabled(false)
-                pagerGestureSuppressed = true
+                if (forwardTouchToSuper) {
+                    findParentPager()?.setGestureDetectorEnabled(false)
+                    pagerGestureSuppressed = true
+                }
+            }
+        }
+
+        if (event.actionMasked == MotionEvent.ACTION_MOVE && downOnOcrBox && !swipeReleased) {
+            val dx = kotlin.math.abs(event.x - downX)
+            val dy = kotlin.math.abs(event.y - downY)
+            if (dx > touchSlop || dy > touchSlop) {
+                // It's a swipe/drag: release interception so parent/SSIV can handle it.
+                swipeReleased = true
+                downOnOcrBox = false
+                suppressSuperForGesture = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                if (pagerGestureSuppressed) {
+                    findParentPager()?.setGestureDetectorEnabled(true)
+                    pagerGestureSuppressed = false
+                }
             }
         }
 
         // Let gesture detector process the event first (for safe single tap methods)
-        val gestureResult = if (ocrHost?.ocrEnabled == true) {
+        val gestureResult = if (ocrEnabled && !swipeReleased) {
             gestureDetector.onTouchEvent(event)
         } else {
             false
         }
 
-        // Always pass to SSIV to maintain zoom/pan state
-        val superResult = super.onTouchEvent(event)
+        // Always pass to SSIV to maintain zoom/pan state (in paged mode)
+        val superResult = if (forwardTouchToSuper && !suppressSuperForGesture) {
+            super.onTouchEvent(event)
+        } else {
+            false
+        }
 
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             if (pagerGestureSuppressed) {
                 findParentPager()?.setGestureDetectorEnabled(true)
                 pagerGestureSuppressed = false
             }
+            parent?.requestDisallowInterceptTouchEvent(false)
+            // Clear hit test cache
+            cachedHitBlock = null
+            cachedHitX = Float.NaN
+            cachedHitY = Float.NaN
+            suppressSuperForGesture = false
+            downOnOcrBox = false
+            swipeReleased = false
         }
 
-        // Keep SSIV gestures (zoom/pan) working while still consuming OCR taps.
         return gestureResult || superResult
     }
 
@@ -415,8 +505,8 @@ class OcrSubsamplingImageView(
         val nx = sourcePoint.x / sWidth
         val ny = sourcePoint.y / sHeight
 
-        // Expand hit area to make edge text easier to tap.
-        val edgePaddingViewPx = 24f * context.resources.displayMetrics.density
+        // Keep OCR hit testing precise but allow tiny edge tolerance for side taps.
+        val edgePaddingViewPx = 2f * context.resources.displayMetrics.density
         val sourcePaddingPx = edgePaddingViewPx / scale.coerceAtLeast(1f)
         val nxPadding = sourcePaddingPx / sWidth
         val nyPadding = sourcePaddingPx / sHeight
@@ -471,20 +561,36 @@ class OcrSubsamplingImageView(
     // ==================== Gesture Listener ====================
 
     /**
+     * Get cached hit test result if coordinates match, otherwise recalculate.
+     * Allows gesture detector to reuse ACTION_DOWN hit test result.
+     */
+    private fun getCachedHitBlock(viewX: Float, viewY: Float): OcrTextBlock? {
+        // Use cache if coordinates are close enough (within 3dp tolerance)
+        val tolerance = 3f * context.resources.displayMetrics.density
+        if (!cachedHitX.isNaN() && !cachedHitY.isNaN() &&
+            kotlin.math.abs(viewX - cachedHitX) < tolerance &&
+            kotlin.math.abs(viewY - cachedHitY) < tolerance
+        ) {
+            return cachedHitBlock
+        }
+        // Fallback: recalculate (gesture detector may call with slightly different coordinates)
+        return hitTestSource(viewX, viewY)
+    }
+
+    /**
      * Gesture listener using safe methods only (per SSIV wiki §9).
      */
     inner class OcrGestureListener : GestureDetector.SimpleOnGestureListener() {
 
         override fun onDown(e: MotionEvent): Boolean {
-            val host = ocrHost ?: return false
-            val hitBlock = hitTestSource(e.x, e.y)
-            // Keep tracking while a block is active so an outside tap can dismiss it.
-            return hitBlock != null || host.activeOcrBlock != null
+            val hitBlock = getCachedHitBlock(e.x, e.y)
+            // Outside-touch dismissal is handled on ACTION_DOWN; only consume when tapping a block.
+            return hitBlock != null
         }
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
             val host = ocrHost ?: return false
-            val block = hitTestSource(e.x, e.y)
+            val block = getCachedHitBlock(e.x, e.y)
             if (block == null) {
                 if (host.activeOcrBlock != null) {
                     host.dismissActiveOcrBlock()

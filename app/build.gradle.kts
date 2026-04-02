@@ -31,8 +31,8 @@ android {
     defaultConfig {
         applicationId = "app.chimahon"
 
-        versionCode = 2
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.1.0"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")

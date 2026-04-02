@@ -13,6 +13,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 data class LensResult(
@@ -106,12 +109,65 @@ class LensClient(
                     OwOCRMerger.merge(engineLines, config)
                 }
             }
+            val dedupedResults = dedupeChunkBoundaryResults(mergedResults)
 
             OcrDebugResult(
                 rawChunks = rawChunks,
-                mergedResults = mergedResults,
+                mergedResults = dedupedResults,
             )
         }
+    }
+
+    private fun dedupeChunkBoundaryResults(results: List<OcrResult>): List<OcrResult> {
+        if (results.size < 2) return results
+
+        val kept = mutableListOf<OcrResult>()
+        val sorted = results.sortedByDescending { it.tightBoundingBox.width * it.tightBoundingBox.height }
+        for (candidate in sorted) {
+            val duplicate = kept.any { existing ->
+                sameOrientation(existing, candidate) &&
+                    sameText(existing.text, candidate.text) &&
+                    (iou(existing.tightBoundingBox, candidate.tightBoundingBox) >= 0.55 ||
+                        closeCenters(existing.tightBoundingBox, candidate.tightBoundingBox))
+            }
+            if (!duplicate) {
+                kept += candidate
+            }
+        }
+        return kept
+    }
+
+    private fun sameText(a: String, b: String): Boolean {
+        return a.trim() == b.trim()
+    }
+
+    private fun sameOrientation(a: OcrResult, b: OcrResult): Boolean {
+        return (a.forcedOrientation ?: "") == (b.forcedOrientation ?: "")
+    }
+
+    private fun closeCenters(a: BoundingBox, b: BoundingBox): Boolean {
+        val ax = a.x + a.width / 2.0
+        val ay = a.y + a.height / 2.0
+        val bx = b.x + b.width / 2.0
+        val by = b.y + b.height / 2.0
+        return hypot(ax - bx, ay - by) <= 0.01
+    }
+
+    private fun iou(a: BoundingBox, b: BoundingBox): Double {
+        val ax2 = a.x + a.width
+        val ay2 = a.y + a.height
+        val bx2 = b.x + b.width
+        val by2 = b.y + b.height
+
+        val interW = max(0.0, min(ax2, bx2) - max(a.x, b.x))
+        val interH = max(0.0, min(ay2, by2) - max(a.y, b.y))
+        val interArea = interW * interH
+        if (interArea <= 0.0) return 0.0
+
+        val aArea = a.width * a.height
+        val bArea = b.width * b.height
+        val union = aArea + bArea - interArea
+        return if (union <= 0.0) 0.0 else interArea / union
     }
 
     private suspend fun getRawOcrDataInternal(
