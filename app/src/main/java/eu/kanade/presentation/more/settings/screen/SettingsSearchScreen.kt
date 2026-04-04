@@ -298,7 +298,6 @@ private val settingScreens = listOf(
     SettingsDataScreen,
     SettingsSecurityScreen,
     // SY -->
-    SettingsEhScreen,
     SettingsMangadexScreen,
     // SY <--
     SettingsAdvancedScreen,

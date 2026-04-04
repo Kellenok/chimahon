@@ -42,8 +42,6 @@ import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import eu.kanade.tachiyomi.util.system.openInBrowser
-import exh.pref.DelegateSourcePreferences
-import exh.source.ExhPreferences
 import tachiyomi.core.common.Constants
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
@@ -82,10 +80,6 @@ fun MoreScreen(
     // KMK <--
 ) {
     val uriHandler = LocalUriHandler.current
-    // SY -->
-    val exhPreferences = remember { Injekt.get<ExhPreferences>() }
-    val delegateSourcePreferences = remember { Injekt.get<DelegateSourcePreferences>() }
-    // SY <--
 
     Scaffold { contentPadding ->
         ScrollbarLazyColumn(
@@ -200,16 +194,6 @@ fun MoreScreen(
                     icon = Icons.Outlined.Storage,
                     onPreferenceClick = onClickDataAndStorage,
                 )
-            }
-            // SY -->
-            if (exhPreferences.isHentaiEnabled().get() || delegateSourcePreferences.delegateSources().get()) {
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(SYMR.strings.eh_batch_add),
-                        icon = Icons.AutoMirrored.Outlined.PlaylistAdd,
-                        onPreferenceClick = onClickBatchAdd,
-                    )
-                }
             }
             // SY <--
 

@@ -773,14 +773,6 @@ object SettingsAdvancedScreen : SearchableSettings {
             title = stringResource(SYMR.strings.developer_tools),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = exhPreferences.isHentaiEnabled(),
-                    title = stringResource(SYMR.strings.toggle_hentai_features),
-                    subtitle = stringResource(SYMR.strings.toggle_hentai_features_summary),
-                    onValueChanged = {
-                        true
-                    },
-                ),
-                Preference.PreferenceItem.SwitchPreference(
                     preference = sourcePreferences.enableSourceBlacklist(),
                     title = stringResource(SYMR.strings.enable_source_blacklist),
                     subtitle = stringResource(
@@ -794,7 +786,9 @@ object SettingsAdvancedScreen : SearchableSettings {
                     subtitle = stringResource(
                         SYMR.strings.toggle_delegated_sources_summary,
                         stringResource(MR.strings.app_name),
-                        AndroidSourceManager.DELEGATED_SOURCES.values.map { it.sourceName }.distinct()
+                        AndroidSourceManager.DELEGATED_SOURCES.values
+                            .filter { it.sourceName !in listOf("Pururin", "Tsumino", "HBrowse", "8Muses", "NHentai") }
+                            .map { it.sourceName }.distinct()
                             .joinToString(),
                     ),
                 ),
