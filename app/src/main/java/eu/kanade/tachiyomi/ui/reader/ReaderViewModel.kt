@@ -172,6 +172,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private val ocrInFlight =
         mutableMapOf<OcrCacheKey, Deferred<List<eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock>>>()
     private val maxOcrCacheEntries = 120
+    private var ocrPrefetchJob: kotlinx.coroutines.Job? = null
 
     private val mokuroChapterCache = mutableMapOf<Long, MokuroChapterData>()
     private val mokuroLoadMutex = mutableMapOf<Long, Mutex>()
@@ -741,7 +742,28 @@ class ReaderViewModel @JvmOverloads constructor(
             downloadNextChapters()
         }
 
+        startOcrPrefetch(page)
+
         eventChannel.trySend(Event.PageChanged)
+    }
+
+    private fun startOcrPrefetch(currentPage: ReaderPage) {
+        ocrPrefetchJob?.cancel()
+        ocrPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            val chapters = state.value.viewerChapters ?: return@launch
+            val allPages = chapters.currChapter.pages ?: return@launch
+            val startIndex = currentPage.index + 1
+            val endIndex = (startIndex + 10).coerceAtMost(allPages.size)
+
+            for (i in startIndex until endIndex) {
+                val page = allPages[i]
+                try {
+                    getOcrBlocks(page)
+                } catch (_: Exception) {
+                    // Prefetch failures are silently ignored
+                }
+            }
+        }
     }
 
     private fun downloadNextChapters() {

@@ -11,12 +11,15 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import android.util.Log
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
+
+private const val TAG = "LensClient"
 
 data class LensResult(
     val fullText: String,
@@ -174,10 +177,16 @@ class LensClient(
         bytes: ByteArray,
         language: OcrLanguage,
     ): List<RawChunk> {
-        return prepareForOcr(bytes).map { chunk ->
+        Log.d(TAG, "getRawOcrDataInternal: calling prepareForOcr")
+        val results = mutableListOf<RawChunk>()
+        var index = 0
+        for (chunk in prepareForOcr(bytes)) {
+            Log.d(TAG, "getRawOcrDataInternal: [$index] sending chunk globalY=${chunk.globalY} size=${chunk.width}x${chunk.height} pngBytes=${chunk.pngBytes.size}")
             val lensResult = processImageBytes(chunk.pngBytes, language.bcp47)
+            Log.d(TAG, "getRawOcrDataInternal: [$index] Lens API returned fullText length=${lensResult.fullText.length}, paragraphs=${lensResult.paragraphs.size}")
             val flatLines = LensMerger.flattenToPixelLines(lensResult, chunk.width, chunk.height, language)
-            RawChunk(
+            Log.d(TAG, "getRawOcrDataInternal: [$index] got ${flatLines.size} lines from chunk at globalY=${chunk.globalY}")
+            results += RawChunk(
                 lines = flatLines,
                 width = chunk.width,
                 height = chunk.height,
@@ -185,7 +194,10 @@ class LensClient(
                 fullWidth = chunk.fullWidth,
                 fullHeight = chunk.fullHeight,
             )
+            index++
         }
+        Log.d(TAG, "getRawOcrDataInternal: total ${results.size} chunks processed")
+        return results
     }
 
     private suspend fun <T> retryOcr(block: suspend () -> T): T {
