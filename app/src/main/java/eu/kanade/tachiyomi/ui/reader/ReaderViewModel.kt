@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.saver.Location
 import eu.kanade.tachiyomi.data.sync.SyncDataJob
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.MetadataSource
 import eu.kanade.tachiyomi.source.online.all.MergedSource
@@ -50,6 +51,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
 import eu.kanade.tachiyomi.util.chapter.filterDownloaded
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
 import eu.kanade.tachiyomi.util.editCover
+import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.lang.byteSize
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.DiskUtil.MAX_FILE_NAME_BYTES
@@ -152,6 +154,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private val ocrCacheManager: chimahon.ocr.OcrCacheManager = Injekt.get(),
     private val dictionaryPreferences: DictionaryPreferences = Injekt.get(),
     private val ocrManager: eu.kanade.tachiyomi.data.ocr.OcrManager = uy.kohesive.injekt.Injekt.get(),
+    private val localFileSystem: tachiyomi.source.local.io.LocalSourceFileSystem = Injekt.get(),
 ) : ViewModel() {
 
     private data class OcrCacheKey(
@@ -159,11 +162,19 @@ class ReaderViewModel @JvmOverloads constructor(
         val pageIndex: Int,
     )
 
+    private data class MokuroChapterData(
+        val mokuro: chimahon.ocr.MokuroVolume,
+        val imageFiles: List<chimahon.ocr.ImageFileInfo>,
+    )
+
     private val ocrCacheMutex = Mutex()
     private val ocrCache = LinkedHashMap<OcrCacheKey, List<eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock>>()
     private val ocrInFlight =
         mutableMapOf<OcrCacheKey, Deferred<List<eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock>>>()
     private val maxOcrCacheEntries = 120
+
+    private val mokuroChapterCache = mutableMapOf<Long, MokuroChapterData>()
+    private val mokuroLoadMutex = mutableMapOf<Long, Mutex>()
 
     private val mutableState = MutableStateFlow(State())
     val state = mutableState.asStateFlow()
@@ -421,6 +432,8 @@ class ReaderViewModel @JvmOverloads constructor(
                 downloadManager.addDownloadsToStartOfQueue(listOf(it))
             }
         }
+        mokuroChapterCache.clear()
+        mokuroLoadMutex.clear()
     }
 
     /**
@@ -1568,6 +1581,201 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
+    private suspend fun loadMokuroChapter(
+        chapter: Chapter,
+        source: Source,
+    ): MokuroChapterData? {
+        if (source.isLocal() == false) return null
+
+        val chapterId = chapter.id ?: return null
+
+        mokuroChapterCache[chapterId]?.let { return it }
+
+        val mutex = synchronized(mokuroLoadMutex) {
+            mokuroLoadMutex.getOrPut(chapterId) { Mutex() }
+        }
+
+        return mutex.withLock {
+            mokuroChapterCache[chapterId]?.let { return@withLock it }
+
+            val parts = chapter.url.split('/', limit = 2)
+            if (parts.size != 2) return@withLock null
+            val (mangaDirName, chapterName) = parts
+
+            val baseDir = localFileSystem.getBaseDirectory()
+                ?.findFile(mangaDirName)
+                ?: return@withLock null
+
+            val chapterFile = baseDir.findFile(chapterName)
+                ?: return@withLock null
+
+            val isArchive = chapterName.endsWith(".cbz", ignoreCase = true) ||
+                chapterName.endsWith(".zip", ignoreCase = true) ||
+                chapterName.endsWith(".cbr", ignoreCase = true)
+
+            val mokuroFile = findMokuroFile(chapterFile, chapterName, baseDir, isArchive)
+                ?: return@withLock null
+
+            val imageFiles = if (chapterFile.isDirectory) {
+                chapterFile.listFiles()
+                    ?.filter { it.isFile && isImageExtension(it.name) }
+                    ?.sortedWith { f1, f2 ->
+                        f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty())
+                    }
+                    ?.map { f ->
+                        chimahon.ocr.ImageFileInfo(
+                            name = f.name.orEmpty(),
+                            relativePath = f.name.orEmpty(),
+                            basename = f.name?.substringBeforeLast('.') ?: "",
+                        )
+                    }
+                    .orEmpty()
+            } else {
+                listOf(
+                    chimahon.ocr.ImageFileInfo(
+                        name = chapterName,
+                        relativePath = chapterName,
+                        basename = chapterName.substringBeforeLast('.'),
+                    ),
+                )
+            }
+
+            val content = mokuroFile.openInputStream().use { it.bufferedReader().readText() }
+            val mokuro = chimahon.ocr.parseMokuro(content)
+                ?: return@withLock null
+
+            val data = MokuroChapterData(mokuro, imageFiles)
+            mokuroChapterCache[chapterId] = data
+            logcat { "Mokuro: cached chapter $chapterId with ${mokuro.pages.size} pages, ${imageFiles.size} images" }
+            data
+        }
+    }
+
+    private fun getMokuroBlocksForPage(
+        chapterData: MokuroChapterData,
+        pageIndex: Int,
+    ): List<eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock>? {
+        val mokuroPage = chimahon.ocr.resolveMokuroPage(
+            chapterData.mokuro,
+            chapterData.imageFiles,
+            pageIndex,
+        ) ?: return null
+
+        return chimahon.ocr.convertMokuroBlocks(mokuroPage).map { block ->
+            eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock(
+                xmin = block.xmin,
+                ymin = block.ymin,
+                xmax = block.xmax,
+                ymax = block.ymax,
+                lines = block.lines,
+                vertical = block.vertical,
+                lineGeometries = block.lineGeometries?.map { lg ->
+                    eu.kanade.tachiyomi.ui.reader.viewer.OcrLineGeometry(lg.xmin, lg.ymin, lg.xmax, lg.ymax, lg.rotation)
+                },
+            )
+        }
+    }
+
+    private suspend fun prewarmMokuroOcr(
+        manga: Manga,
+        chapter: Chapter,
+        source: Source,
+        totalPages: Int,
+        startPage: Int = 0,
+        count: Int = 4,
+    ) {
+        val chapterId = chapter.id ?: return
+        val chapterData = loadMokuroChapter(chapter, source) ?: return
+
+        val endPage = minOf(startPage + count, totalPages)
+        for (pageIndex in startPage until endPage) {
+            val cacheKey = OcrCacheKey(chapterId, pageIndex)
+            ocrCacheMutex.withLock {
+                if (ocrCache.containsKey(cacheKey)) return@withLock
+            }
+
+            getMokuroBlocksForPage(chapterData, pageIndex)?.let { blocks ->
+                ocrCacheMutex.withLock {
+                    ocrCache[cacheKey] = blocks
+                    while (ocrCache.size > maxOcrCacheEntries) {
+                        val firstKey = ocrCache.keys.firstOrNull() ?: break
+                        ocrCache.remove(firstKey)
+                    }
+                }
+                ocrCacheManager.saveOcrBlocks(
+                    manga = manga,
+                    chapter = chapter,
+                    source = source,
+                    pageIndex = pageIndex,
+                    blocks = blocks.map {
+                        chimahon.ocr.OcrTextBlock(
+                            xmin = it.xmin,
+                            ymin = it.ymin,
+                            xmax = it.xmax,
+                            ymax = it.ymax,
+                            lines = it.lines,
+                            vertical = it.vertical,
+                            lineGeometries = it.lineGeometries?.map { lg ->
+                                chimahon.ocr.OcrLineGeometry(lg.xmin, lg.ymin, lg.xmax, lg.ymax, lg.rotation)
+                            },
+                        )
+                    },
+                    language = chimahon.ocr.OcrLanguage.JAPANESE.bcp47,
+                )
+            }
+        }
+        logcat { "Mokuro: prewarmed OCR for pages $startPage-${endPage - 1} of chapter $chapterId" }
+    }
+
+    private suspend fun tryLoadMokuroBlocks(
+        manga: Manga,
+        chapter: Chapter,
+        source: Source,
+        pageIndex: Int,
+    ): List<eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock>? {
+        if (source.isLocal() == false) return null
+
+        val chapterData = loadMokuroChapter(chapter, source) ?: return null
+        return getMokuroBlocksForPage(chapterData, pageIndex)
+    }
+
+    private fun findMokuroFile(
+        chapterFile: com.hippo.unifile.UniFile,
+        chapterName: String,
+        parentDir: com.hippo.unifile.UniFile,
+        isArchive: Boolean,
+    ): com.hippo.unifile.UniFile? {
+        val mokuroBaseName = if (isArchive) {
+            chapterName.substringBeforeLast('.')
+        } else {
+            chapterName
+        }
+
+        if (chapterFile.isDirectory) {
+            val insideFile = chapterFile.listFiles()?.firstOrNull {
+                it.name?.endsWith(".mokuro", ignoreCase = true) == true
+            }
+            if (insideFile != null) {
+                logcat { "Mokuro: found inside chapter folder: ${insideFile.name}" }
+                return insideFile
+            }
+        }
+
+        val siblingFile = parentDir.findFile("$mokuroBaseName.mokuro")
+        if (siblingFile != null && siblingFile.isFile == true) {
+            logcat { "Mokuro: found as sibling: $mokuroBaseName.mokuro" }
+            return siblingFile
+        }
+
+        logcat { "Mokuro: no .mokuro file found for $chapterName (tried inside folder and sibling)" }
+        return null
+    }
+
+    private fun isImageExtension(name: String?): Boolean {
+        val ext = name?.substringAfterLast('.', "")?.lowercase() ?: return false
+        return ext in setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+    }
+
     private suspend fun fetchOcrBlocks(page: ReaderPage): List<eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock> {
         val startMs = SystemClock.elapsedRealtime()
         val dbChapter = page.chapter.chapter
@@ -1578,8 +1786,53 @@ class ReaderViewModel @JvmOverloads constructor(
         val manga = state.value.manga ?: return emptyList()
         val source = sourceManager.getOrStub(manga.source)
 
+        if (source.isLocal()) {
+            tryLoadMokuroBlocks(manga, domainChapter, source, page.index)?.let { blocks ->
+                ocrCacheMutex.withLock {
+                    ocrCache[cacheKey] = blocks
+                    while (ocrCache.size > maxOcrCacheEntries) {
+                        val firstKey = ocrCache.keys.firstOrNull() ?: break
+                        ocrCache.remove(firstKey)
+                    }
+                }
+                ocrCacheManager.saveOcrBlocks(
+                    manga = manga,
+                    chapter = domainChapter,
+                    source = source,
+                    pageIndex = page.index,
+                    blocks = blocks.map {
+                        chimahon.ocr.OcrTextBlock(
+                            xmin = it.xmin,
+                            ymin = it.ymin,
+                            xmax = it.xmax,
+                            ymax = it.ymax,
+                            lines = it.lines,
+                            vertical = it.vertical,
+                            lineGeometries = it.lineGeometries?.map { lg ->
+                                chimahon.ocr.OcrLineGeometry(lg.xmin, lg.ymin, lg.xmax, lg.ymax, lg.rotation)
+                            },
+                        )
+                    },
+                    language = chimahon.ocr.OcrLanguage.JAPANESE.bcp47,
+                )
+                val elapsedMs = SystemClock.elapsedRealtime() - startMs
+                logcat { "OCR mokuro path: chapter=${page.chapter.chapter.id} page=${page.index} blocks=${blocks.size} time=${elapsedMs}ms" }
+
+                if (page.index < 3) {
+                    val totalPages = page.chapter.pages?.size ?: 0
+                    if (totalPages > 0) {
+                        viewModelScope.launchIO {
+                            prewarmMokuroOcr(manga, domainChapter, source, totalPages, startPage = page.index + 1)
+                        }
+                    }
+                }
+
+                return blocks
+            }
+        }
+
         val diskBlocks = ocrCacheManager.loadOcrBlocks(manga, domainChapter, source, page.index)
-        if (diskBlocks != null) {
+        if (diskBlocks != null && diskBlocks.isNotEmpty()) {
             ocrCacheMutex.withLock {
                 ocrCache[cacheKey] = diskBlocks.map { it.toViewerBlock() }
                 while (ocrCache.size > maxOcrCacheEntries) {
