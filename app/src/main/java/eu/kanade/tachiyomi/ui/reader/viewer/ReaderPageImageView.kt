@@ -128,6 +128,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
             repository: DictionaryRepository,
             screenX: Float,
             screenY: Float,
+            mediaInfo: chimahon.MediaInfo?,
+            screenshot: android.graphics.Bitmap?,
         ) -> Unit
     )? = null
 
@@ -255,6 +257,20 @@ open class ReaderPageImageView @JvmOverloads constructor(
             is AppCompatImageView -> it.dispose()
         }
         it.isVisible = false
+    }
+
+    /**
+     * Captures the currently visible page content as a bitmap at screen resolution.
+     * Uses View.drawToBitmap() which renders the view's current visual state.
+     */
+    fun captureVisibleBitmap(): android.graphics.Bitmap? {
+        val view = pageView ?: return null
+        return try {
+            android.view.View.drawToBitmap(view)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to capture visible bitmap" }
+            null
+        }
     }
 
     /**
@@ -675,7 +691,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
             val repository = dictionaryRepository
             if (webView != null && repository != null) {
                 ocrPopupLookupString = lookupString
-                onShowOcrPopup?.invoke(lookupString, block.fullText, charOffset, webView, repository, screenX, screenY)
+                val screenshot = captureVisibleBitmap()
+                onShowOcrPopup?.invoke(lookupString, block.fullText, charOffset, webView, repository, screenX, screenY, null, screenshot)
             } else {
                 logcat(LogPriority.WARN) { "OCR popup: webView or repository is null" }
             }

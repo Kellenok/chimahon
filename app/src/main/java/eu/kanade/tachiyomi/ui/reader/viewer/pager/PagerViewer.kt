@@ -53,6 +53,8 @@ abstract class PagerViewer(
             repository: DictionaryRepository,
             anchorX: Float,
             anchorY: Float,
+            mediaInfo: chimahon.MediaInfo?,
+            screenshot: android.graphics.Bitmap?,
         ) -> Unit
     )? = null
 
@@ -196,6 +198,17 @@ abstract class PagerViewer(
      */
     override fun getView(): View {
         return pager
+    }
+
+    /**
+     * Captures a screenshot of the currently visible page at screen resolution.
+     */
+    override fun captureScreenshot(): android.graphics.Bitmap? {
+        val currentItem = pager.currentItem
+        val readerItem = adapter.joinedItems.getOrNull(currentItem) ?: return null
+        val page = (readerItem.first as? ReaderPage) ?: (readerItem.second as? ReaderPage) ?: return null
+        val holder = getPageHolder(page) ?: return null
+        return holder.captureVisibleBitmap()
     }
 
     /**

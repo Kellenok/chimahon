@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
+import android.graphics.Bitmap
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -42,4 +43,10 @@ interface Viewer {
      * return true if the event was handled, false otherwise.
      */
     fun handleGenericMotionEvent(event: MotionEvent): Boolean
+
+    /**
+     * Captures a screenshot of the currently visible page at screen resolution.
+     * Returns null if no page is visible or capture fails.
+     */
+    fun captureScreenshot(): Bitmap?
 }

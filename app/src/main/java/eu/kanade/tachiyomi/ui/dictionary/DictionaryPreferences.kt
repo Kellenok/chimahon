@@ -18,6 +18,8 @@ class DictionaryPreferences(
 
     fun showFrequencyHarmonic() = preferenceStore.getBoolean("pref_dict_show_frequency_harmonic", false)
 
+    fun groupTerms() = preferenceStore.getBoolean("pref_dict_group_terms", true)
+
     // Anki integration
     fun ankiEnabled() = preferenceStore.getBoolean("pref_anki_enabled", false)
 

@@ -10,6 +10,7 @@ import androidx.annotation.ColorInt
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updateMargins
+import chimahon.MediaInfo
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
@@ -93,8 +94,8 @@ class WebtoonPageHolder(
         frame.onImageLoaded = { onImageDecoded() }
         frame.onImageLoadError = { error -> setError(error) }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
-        frame.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY ->
-            viewer.onShowOcrPopup?.invoke(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY)
+        frame.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot ->
+            viewer.onShowOcrPopup?.invoke(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot)
         }
     }
 

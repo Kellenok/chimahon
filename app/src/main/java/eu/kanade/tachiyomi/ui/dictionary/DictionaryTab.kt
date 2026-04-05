@@ -142,6 +142,7 @@ data object DictionaryTab : Tab {
         val ankiDupAction by dictionaryPreferences.ankiDuplicateAction().collectAsState()
         val ankiTags by dictionaryPreferences.ankiDefaultTags().collectAsState()
         val showFrequencyHarmonic by dictionaryPreferences.showFrequencyHarmonic().collectAsState()
+        val groupTerms by dictionaryPreferences.groupTerms().collectAsState()
 
         // Simple callback for Anki lookup - index maps to results array
         val onAnkiLookup: ((Int) -> Unit)? = if (ankiEnabled) {
@@ -159,6 +160,7 @@ data object DictionaryTab : Tab {
                             dupCheck = ankiDupCheck,
                             dupScope = ankiDupScope,
                             dupAction = ankiDupAction,
+                            groupTerms = groupTerms,
                         )
                         when (ankiResult) {
                             is AnkiResult.Success -> context.toast(MR.strings.anki_card_added)
@@ -293,6 +295,7 @@ data object DictionaryTab : Tab {
                             "Search to view dictionary entries"
                         },
                         showFrequencyHarmonic = showFrequencyHarmonic,
+                        groupTerms = groupTerms,
                         existingExpressions = existingExpressions,
                         webViewProvider = { context ->
                             retainedWebView ?: WebView(context).also { retainedWebView = it }

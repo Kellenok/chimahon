@@ -42,6 +42,11 @@ data class Cloze(
     val suffix: String,
 )
 
+data class MediaInfo(
+    val mangaTitle: String,
+    val chapterName: String,
+)
+
 data class TermResult(
     val expression: String,
     val reading: String,

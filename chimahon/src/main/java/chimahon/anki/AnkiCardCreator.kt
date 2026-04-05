@@ -4,6 +4,7 @@ import android.content.Context
 import chimahon.Cloze
 import chimahon.GlossaryEntry
 import chimahon.LookupResult
+import chimahon.MediaInfo
 import chimahon.PitchEntry
 import org.json.JSONArray
 import org.json.JSONObject
@@ -66,6 +67,9 @@ object Marker {
     const val AUDIO = "audio"
     const val SCREENSHOT = "screenshot"
     const val SEARCH_QUERY = "search-query"
+    const val MANGA = "manga"
+    const val CHAPTER = "chapter"
+    const val MEDIA = "media"
 
     val ALL: List<String> = listOf(
         EXPRESSION, READING, FURIGANA, FURIGANA_PLAIN,
@@ -76,6 +80,7 @@ object Marker {
         DICTIONARY, DICTIONARY_ALIAS,
         FREQUENCIES, FREQUENCY_HARMONIC_RANK, FREQUENCY_AVERAGE_RANK,
         PITCH_ACCENTS, PITCH_ACCENT_POSITIONS, PITCH_ACCENT_CATEGORIES,
+        MANGA, CHAPTER, MEDIA,
     )
 
     val ALL_WITH_TODO: List<String> = ALL + listOf(AUDIO, SCREENSHOT, SEARCH_QUERY)
@@ -102,6 +107,9 @@ object Marker {
         TAGS to listOf("tags", "tag"),
         PART_OF_SPEECH to listOf("part-of-speech", "pos", "part"),
         CONJUGATION to listOf("conjugation", "inflection"),
+        MANGA to listOf("manga", "series", "title"),
+        CHAPTER to listOf("chapter", "episode"),
+        MEDIA to listOf("media", "source", "context"),
     )
 
     fun autoDetect(fieldName: String, fieldIndex: Int, entryType: String = "term"): String? {
@@ -147,6 +155,9 @@ object AnkiCardCreator {
         dupAction: String,
         sentence: String = "",
         offset: Int = -1,
+        media: MediaInfo? = null,
+        groupTerms: Boolean = true,
+        screenshotBytes: ByteArray? = null,
     ): AnkiResult {
         android.util.Log.d(TAG, "addToAnki: deck=$deck, model=$model, fieldMapJson=$fieldMapJson")
         
@@ -163,7 +174,21 @@ object AnkiCardCreator {
         } else {
             null
         }
-        val fields = buildFields(result, fieldMap, cloze)
+
+        var screenshotFilename: String? = null
+        if (screenshotBytes != null) {
+            try {
+                screenshotFilename = bridge.storeMedia(
+                    filename = generateScreenshotFilename(screenshotBytes),
+                    data = screenshotBytes,
+                )
+                android.util.Log.d(TAG, "addToAnki: stored screenshot media as $screenshotFilename")
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "addToAnki: failed to store screenshot media", e)
+            }
+        }
+
+        val fields = buildFields(result, fieldMap, cloze, media, groupTerms, screenshotFilename)
         android.util.Log.d(TAG, "addToAnki: built fields=$fields")
         val tagList = tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
 
@@ -247,15 +272,18 @@ object AnkiCardCreator {
         result: LookupResult,
         fieldMap: Map<String, String>,
         cloze: Cloze? = null,
+        media: MediaInfo? = null,
+        groupTerms: Boolean = true,
+        screenshotFilename: String? = null,
     ): Map<String, String> = fieldMap.mapValues { (_, template) ->
-        formatField(template, result, cloze)
+        formatField(template, result, cloze, media, groupTerms, screenshotFilename)
     }
 
-    private fun formatField(template: String, result: LookupResult, cloze: Cloze?): String {
+    private fun formatField(template: String, result: LookupResult, cloze: Cloze?, media: MediaInfo?, groupTerms: Boolean, screenshotFilename: String?): String {
         if (template.isBlank()) return ""
         val spacedTemplate = template.replace("}{", "} {")
         return MARKER_PATTERN.replace(spacedTemplate) { match ->
-            renderMarker(match.groupValues[1], result, cloze)
+            renderMarker(match.groupValues[1], result, cloze, media, groupTerms, screenshotFilename)
         }
     }
 
@@ -312,35 +340,39 @@ object AnkiCardCreator {
     // Marker rendering
     // =============================================================================
 
-    fun renderMarker(marker: String, result: LookupResult, cloze: Cloze? = null): String = when (marker) {
+    fun renderMarker(marker: String, result: LookupResult, cloze: Cloze? = null, media: MediaInfo? = null, groupTerms: Boolean = true, screenshotFilename: String? = null): String = when (marker) {
         Marker.EXPRESSION -> result.term.expression
         Marker.READING -> result.term.reading
         Marker.FURIGANA -> buildFuriganaHtml(result.term.expression, result.term.reading)
         Marker.FURIGANA_PLAIN -> buildFuriganaPlain(result.term.expression, result.term.reading)
-        Marker.GLOSSARY -> buildGlossary(result.term.glossaries, brief = false, noDictTag = false, firstOnly = false)
+        Marker.GLOSSARY -> buildGlossary(result.term.glossaries, brief = false, noDictTag = false, firstOnly = false, groupTerms = groupTerms)
         Marker.GLOSSARY_BRIEF -> buildGlossary(
             result.term.glossaries,
             brief = true,
             noDictTag = false,
             firstOnly = false,
+            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_NO_DICT -> buildGlossary(
             result.term.glossaries,
             brief = false,
             noDictTag = true,
             firstOnly = false,
+            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_FIRST -> buildGlossary(
             result.term.glossaries,
             brief = false,
             noDictTag = false,
             firstOnly = true,
+            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_FIRST_BRIEF -> buildGlossary(
             result.term.glossaries,
             brief = true,
             noDictTag = false,
             firstOnly = true,
+            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_PLAIN -> buildGlossaryPlain(result.term.glossaries, noDictTag = false)
         Marker.SENTENCE -> cloze?.sentence ?: ""
@@ -360,8 +392,17 @@ object AnkiCardCreator {
         Marker.PITCH_ACCENT_POSITIONS -> buildPitchAccents(result.term.pitches, format = PitchFormat.POSITION)
         Marker.PITCH_ACCENT_CATEGORIES -> buildPitchCategories(result.term.pitches)
         Marker.AUDIO -> ""
-        Marker.SCREENSHOT -> ""
+        Marker.SCREENSHOT -> screenshotFilename?.let { "<img src=\"$it\">" } ?: ""
         Marker.SEARCH_QUERY -> result.term.expression
+        Marker.MANGA -> media?.mangaTitle?.let { escapeHtml(it) } ?: ""
+        Marker.CHAPTER -> media?.chapterName?.let { escapeHtml(it) } ?: ""
+        Marker.MEDIA -> {
+            if (media != null && media.mangaTitle.isNotBlank() && media.chapterName.isNotBlank()) {
+                "${escapeHtml(media.mangaTitle)}-${escapeHtml(media.chapterName)}"
+            } else {
+                ""
+            }
+        }
         else -> parseSingleGlossaryMarker(marker, result)
     }
 
@@ -499,6 +540,7 @@ object AnkiCardCreator {
         noDictTag: Boolean,
         firstOnly: Boolean,
         dictionaryFilter: String? = null,
+        groupTerms: Boolean = true,
     ): String {
         if (glossaries.isEmpty()) return ""
 
@@ -514,7 +556,13 @@ object AnkiCardCreator {
         val sb = StringBuilder()
         sb.append("""<div style="text-align: left;" class="yomitan-glossary">""")
 
-        if (entries.size == 1) {
+        if (!groupTerms && entries.size > 1) {
+            for (entry in entries) {
+                sb.append("""<div class="glossary-entry">""")
+                sb.append(renderGlossarySingle(entry, brief, noDictTag))
+                sb.append("</div>")
+            }
+        } else if (entries.size == 1) {
             sb.append(renderGlossarySingle(entries[0], brief, noDictTag))
         } else {
             sb.append("<ol>")
@@ -921,4 +969,15 @@ object AnkiCardCreator {
 
     private fun camelToKebab(name: String): String =
         name.replace(Regex("([A-Z])")) { "-${it.value.lowercase()}" }
+
+    private fun generateScreenshotFilename(bytes: ByteArray): String {
+        val hash = try {
+            val md = java.security.MessageDigest.getInstance("SHA-1")
+            val digest = md.digest(bytes)
+            digest.joinToString("") { "%02x".format(it) }.take(12)
+        } catch (e: Exception) {
+            "screenshot_${System.currentTimeMillis()}"
+        }
+        return "chimahon_${hash}.png"
+    }
 }

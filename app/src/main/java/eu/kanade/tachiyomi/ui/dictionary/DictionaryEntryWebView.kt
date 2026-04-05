@@ -36,6 +36,7 @@ fun DictionaryEntryWebView(
     headerText: String = "",
     popupScale: Int = 100,
     showFrequencyHarmonic: Boolean = false,
+    groupTerms: Boolean = true,
     existingExpressions: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
     webViewProvider: ((Context) -> WebView)? = null,
@@ -43,9 +44,9 @@ fun DictionaryEntryWebView(
 ) {
     val isDark = isSystemInDarkTheme()
 
-    val payload = remember(results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, existingExpressions) {
+    val payload = remember(results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, groupTerms, existingExpressions) {
         val buildStart = SystemClock.elapsedRealtime()
-        val result = buildRenderPayload(results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, existingExpressions)
+        val result = buildRenderPayload(results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, groupTerms, existingExpressions)
         Log.i(
             "DictionaryRender",
             "payload_build_ms=${SystemClock.elapsedRealtime() - buildStart} results=${results.size}",
@@ -221,6 +222,7 @@ private fun buildRenderPayload(
     placeholder: String,
     isDark: Boolean,
     showFrequencyHarmonic: Boolean,
+    groupTerms: Boolean,
     existingExpressions: Set<String> = emptySet(),
 ): String {
     val buffer = StringWriter(4096)
@@ -229,6 +231,7 @@ private fun buildRenderPayload(
         w.name("placeholder").value(placeholder)
         w.name("isDark").value(isDark)
         w.name("showFrequencyHarmonic").value(showFrequencyHarmonic)
+        w.name("groupTerms").value(groupTerms)
         w.name("existingExpressions").beginArray()
         for (expr in existingExpressions) {
             w.value(expr)

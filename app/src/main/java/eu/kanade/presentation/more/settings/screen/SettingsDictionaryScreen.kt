@@ -119,6 +119,9 @@ private val markerDisplayLabels: Map<String, String> = Marker.ALL.associateWith 
         Marker.AUDIO -> "${prefix}Audio"
         Marker.SCREENSHOT -> "${prefix}Screenshot"
         Marker.SEARCH_QUERY -> "${prefix}Search Query"
+        Marker.MANGA -> "${prefix}Manga"
+        Marker.CHAPTER -> "${prefix}Chapter"
+        Marker.MEDIA -> "${prefix}Media"
         else -> marker
     }
 }
@@ -177,6 +180,9 @@ object SettingsDictionaryScreen : SearchableSettings {
         val showFreqHarmonicPref = dictionaryPreferences.showFrequencyHarmonic()
         val showFreqHarmonic by showFreqHarmonicPref.collectAsState()
 
+        val groupTermsPref = dictionaryPreferences.groupTerms()
+        val groupTerms by groupTermsPref.collectAsState()
+
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.pref_dict_appearance),
             preferenceItems = persistentListOf(
@@ -220,6 +226,11 @@ object SettingsDictionaryScreen : SearchableSettings {
                     preference = showFreqHarmonicPref,
                     title = stringResource(MR.strings.pref_dict_show_frequency_harmonic),
                     subtitle = stringResource(MR.strings.pref_dict_show_frequency_harmonic_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = groupTermsPref,
+                    title = stringResource(MR.strings.pref_dict_group_terms),
+                    subtitle = stringResource(MR.strings.pref_dict_group_terms_summary),
                 ),
             ),
         )

@@ -1243,6 +1243,74 @@
     return article;
   }
 
+  function renderSplitEntries(result, mediaMap, showFrequencyHarmonic, existingExpressions) {
+    const existingSet = Array.isArray(existingExpressions) ? existingExpressions : [];
+    const glossaries = (result.term && Array.isArray(result.term.glossaries)) ? result.term.glossaries : [];
+    const expression = (result.term && result.term.expression) || result.matched || '';
+    const reading = result.term && result.term.reading ? result.term.reading : '';
+    const frequencies = result.term && Array.isArray(result.term.frequencies) ? result.term.frequencies : [];
+    const pitches = result.term && Array.isArray(result.term.pitches) ? result.term.pitches : [];
+    const rules = result.term && result.term.rules ? result.term.rules : '';
+    const process = Array.isArray(result.process) ? result.process.join(' -> ') : '';
+
+    if (glossaries.length === 0) {
+      return [renderEntry(result, mediaMap, showFrequencyHarmonic, existingExpressions)];
+    }
+
+    const articles = [];
+    for (let i = 0; i < glossaries.length; i++) {
+      const glossary = glossaries[i];
+      const article = document.createElement('article');
+      article.className = 'entry';
+      article.dataset.index = String(result.index || 0);
+      article.dataset.dictionary = glossary.dictName || '';
+
+      const body = document.createElement('div');
+      body.className = 'entry-body';
+      article.appendChild(body);
+
+      const headSection = document.createElement('div');
+      headSection.className = 'entry-body-section entry-headword-row';
+      headSection.appendChild(createHeadwordNode(expression, reading));
+
+      const ankiBtn = document.createElement('button');
+      const isAlreadyAdded = existingSet.includes(expression);
+      ankiBtn.className = isAlreadyAdded ? 'anki-add-btn anki-added' : 'anki-add-btn';
+      ankiBtn.textContent = '+';
+      ankiBtn.title = isAlreadyAdded ? 'Already in Anki' : 'Add to Anki';
+      ankiBtn.setAttribute('data-index', String(result.index || 0));
+      ankiBtn.setAttribute('data-expression', expression);
+      ankiBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (typeof AnkiBridge !== 'undefined') {
+          AnkiBridge.addToAnki(ankiBtn.getAttribute('data-index'));
+        }
+      };
+      headSection.appendChild(ankiBtn);
+      body.appendChild(headSection);
+
+      appendFrequenciesSection(body, frequencies, showFrequencyHarmonic);
+
+      if (i === 0) {
+        appendInflectionSection(body, rules, process);
+      }
+
+      const defSection = document.createElement('div');
+      defSection.className = 'entry-body-section';
+      const definitionList = document.createElement('ol');
+      definitionList.className = 'definition-list';
+      definitionList.appendChild(createDefinitionItem(glossary, mediaMap));
+      defSection.appendChild(definitionList);
+      body.appendChild(defSection);
+
+      appendPitchesSection(body, pitches);
+
+      articles.push(article);
+    }
+
+    return articles;
+  }
+
   function renderHeader(text) {
     if (!text) return;
     const container = document.getElementById('entries');
@@ -1302,6 +1370,7 @@
     const mediaMap = payload.mediaDataUris || {};
     const results = Array.isArray(payload.results) ? payload.results : [];
     const existingExpressions = Array.isArray(payload.existingExpressions) ? payload.existingExpressions : [];
+    const groupTerms = payload.groupTerms !== false;
 
     if (results.length === 0) {
       const empty = document.createElement('div');
@@ -1311,7 +1380,12 @@
     } else {
       const fragment = document.createDocumentFragment();
       for (const result of results) {
-        fragment.appendChild(renderEntry(result, mediaMap, payload.showFrequencyHarmonic, existingExpressions));
+        if (groupTerms) {
+          fragment.appendChild(renderEntry(result, mediaMap, payload.showFrequencyHarmonic, existingExpressions));
+        } else {
+          const articles = renderSplitEntries(result, mediaMap, payload.showFrequencyHarmonic, existingExpressions);
+          articles.forEach(a => fragment.appendChild(a));
+        }
       }
       container.appendChild(fragment);
     }

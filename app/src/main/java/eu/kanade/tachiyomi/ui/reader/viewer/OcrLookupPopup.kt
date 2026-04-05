@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
+import android.graphics.Bitmap
 import android.webkit.WebView
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -30,6 +31,7 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.dp
 import chimahon.DictionaryRepository
 import chimahon.LookupResult
+import chimahon.MediaInfo
 import chimahon.anki.AnkiCardCreator
 import chimahon.anki.AnkiResult
 import eu.kanade.tachiyomi.ui.dictionary.DictionaryEntryWebView
@@ -57,6 +59,8 @@ fun OcrLookupPopup(
     repository: DictionaryRepository,
     anchorX: Float,
     anchorY: Float,
+    mediaInfo: MediaInfo? = null,
+    screenshot: Bitmap? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -83,6 +87,8 @@ fun OcrLookupPopup(
     val ankiDupScope by dictionaryPreferences.ankiDuplicateScope().collectAsState()
     val ankiDupAction by dictionaryPreferences.ankiDuplicateAction().collectAsState()
     val ankiTags by dictionaryPreferences.ankiDefaultTags().collectAsState()
+    val showFreqHarmonic by dictionaryPreferences.showFrequencyHarmonic().collectAsState()
+    val groupTerms by dictionaryPreferences.groupTerms().collectAsState()
 
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
@@ -114,6 +120,13 @@ fun OcrLookupPopup(
                         dupAction = ankiDupAction,
                         sentence = fullText,
                         offset = charOffset,
+                        media = mediaInfo,
+                        groupTerms = groupTerms,
+                        screenshotBytes = screenshot?.let { bmp ->
+                            val baos = java.io.ByteArrayOutputStream()
+                            bmp.compress(Bitmap.CompressFormat.PNG, 90, baos)
+                            baos.toByteArray()
+                        },
                     )
                     when (ankiResult) {
                         is AnkiResult.Success -> context.toast(MR.strings.anki_card_added)
@@ -259,6 +272,8 @@ fun OcrLookupPopup(
                             placeholder = "",
                             headerText = lookupString.take(20) + if (lookupString.length > 20) "…" else "",
                             popupScale = popupScalePref,
+                            showFrequencyHarmonic = showFreqHarmonic,
+                            groupTerms = groupTerms,
                             existingExpressions = existingExpressions,
                             webViewProvider = { webView },
                             onAnkiLookup = onAnkiLookup,

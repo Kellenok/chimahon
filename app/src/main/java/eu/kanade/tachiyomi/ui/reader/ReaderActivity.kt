@@ -210,6 +210,8 @@ class ReaderActivity : BaseActivity() {
         val repository: chimahon.DictionaryRepository,
         val anchorX: Float,
         val anchorY: Float,
+        val mediaInfo: chimahon.MediaInfo? = null,
+        val screenshot: android.graphics.Bitmap? = null,
     )
 
     var isScrollingThroughPages = false
@@ -544,6 +546,8 @@ class ReaderActivity : BaseActivity() {
                 repository = popupState.repository,
                 anchorX = popupState.anchorX,
                 anchorY = popupState.anchorY,
+                mediaInfo = popupState.mediaInfo,
+                screenshot = popupState.screenshot,
             )
         }
 
@@ -551,20 +555,38 @@ class ReaderActivity : BaseActivity() {
         when (val viewer = viewModel.state.value.viewer) {
             is PagerViewer -> {
                 if (viewer.onShowOcrPopup == null) {
-                    viewer.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY ->
+                    viewer.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, _, screenshot ->
                         runOnUiThread {
+                            val state = viewModel.state.value
+                            val mediaInfo = if (state.manga != null && state.currentChapter != null) {
+                                chimahon.MediaInfo(
+                                    mangaTitle = state.manga!!.ogTitle,
+                                    chapterName = state.currentChapter!!.chapter.name,
+                                )
+                            } else {
+                                null
+                            }
                             ocrPopupState =
-                                OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY)
+                                OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot)
                         }
                     }
                 }
             }
             is WebtoonViewer -> {
                 if (viewer.onShowOcrPopup == null) {
-                    viewer.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY ->
+                    viewer.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, _, screenshot ->
                         runOnUiThread {
+                            val state = viewModel.state.value
+                            val mediaInfo = if (state.manga != null && state.currentChapter != null) {
+                                chimahon.MediaInfo(
+                                    mangaTitle = state.manga!!.ogTitle,
+                                    chapterName = state.currentChapter!!.chapter.name,
+                                )
+                            } else {
+                                null
+                            }
                             ocrPopupState =
-                                OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY)
+                                OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot)
                         }
                     }
                 }

@@ -58,6 +58,8 @@ class WebtoonViewer(
             repository: DictionaryRepository,
             anchorX: Float,
             anchorY: Float,
+            mediaInfo: chimahon.MediaInfo?,
+            screenshot: android.graphics.Bitmap?,
         ) -> Unit
     )? = null
 
@@ -259,6 +261,16 @@ class WebtoonViewer(
      */
     override fun getView(): View {
         return frame
+    }
+
+    /**
+     * Captures a screenshot of the currently visible page at screen resolution.
+     */
+    override fun captureScreenshot(): android.graphics.Bitmap? {
+        val position = layoutManager.findLastEndVisibleItemPosition()
+        val item = adapter.items.getOrNull(position) as? ReaderPage ?: return null
+        val child = recycler.findViewHolderForAdapterPosition(position) as? WebtoonPageHolder ?: return null
+        return child.frame.captureVisibleBitmap()
     }
 
     /**
