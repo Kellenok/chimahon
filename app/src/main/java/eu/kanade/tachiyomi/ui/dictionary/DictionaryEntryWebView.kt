@@ -40,7 +40,7 @@ fun DictionaryEntryWebView(
     existingExpressions: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
     webViewProvider: ((Context) -> WebView)? = null,
-    onAnkiLookup: ((Int) -> Unit)? = null,
+    onAnkiLookup: ((Int, Int?) -> Unit)? = null,
 ) {
     val isDark = isSystemInDarkTheme()
 
@@ -83,12 +83,13 @@ fun DictionaryEntryWebView(
                             request: WebResourceRequest?,
                         ): Boolean {
                             val url = request?.url ?: return false
-                            // Intercept anki://add?index=0 URLs
+                            // Intercept anki://add?index=0&glossary=0 URLs
                             if (url.scheme == ANKI_SCHEME && url.host == ANKI_PATH_ADD) {
                                 val index = url.getQueryParameter("index")?.toIntOrNull()
+                                val glossary = url.getQueryParameter("glossary")?.toIntOrNull()
                                 val s = view?.tag as? DictionaryWebViewState
                                 if (index != null && index >= 0) {
-                                    s?.onAnkiLookup?.invoke(index)
+                                    s?.onAnkiLookup?.invoke(index, glossary)
                                 }
                                 return true // Consumed
                             }
@@ -99,12 +100,16 @@ fun DictionaryEntryWebView(
                             super.onPageFinished(view, url)
                             val s = view?.tag as? DictionaryWebViewState ?: return
                             s.pageReady = true
-                            // Inject Anki bridge function
+                            // Inject Anki bridge function that accepts two parameters
                             view.evaluateJavascript(
                                 """
                                 window.AnkiBridge = {
-                                    addToAnki: function(index) {
-                                        window.location.href = "anki://add?index=" + index;
+                                    addToAnki: function(index, glossary) {
+                                        var url = "anki://add?index=" + index;
+                                        if (glossary !== undefined && glossary !== null) {
+                                            url += "&glossary=" + glossary;
+                                        }
+                                        window.location.href = url;
                                     }
                                 };
                                 """.trimIndent(),
@@ -184,7 +189,7 @@ private class DictionaryWebViewState(
     val bridge: PayloadBridge = PayloadBridge(),
 ) {
     var pageReady: Boolean = false
-    var onAnkiLookup: ((Int) -> Unit)? = null
+    var onAnkiLookup: ((Int, Int?) -> Unit)? = null
     var lastPayload: String? = null
     var pendingPayload: String? = null
 

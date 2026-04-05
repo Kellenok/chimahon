@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ImportExport
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -122,6 +123,7 @@ private val markerDisplayLabels: Map<String, String> = Marker.ALL.associateWith 
         Marker.MANGA -> "${prefix}Manga"
         Marker.CHAPTER -> "${prefix}Chapter"
         Marker.MEDIA -> "${prefix}Media"
+        Marker.SINGLE_GLOSSARY -> "${prefix}Single Glossary ▸"
         else -> marker
     }
 }
@@ -469,6 +471,8 @@ object SettingsDictionaryScreen : SearchableSettings {
         val enabledPref = remember { dictionaryPreferences.ankiEnabled() }
         val enabled by enabledPref.collectAsState()
 
+        val dictionaries by dictionaryNames.collectAsState()
+
         var pendingPermissionCheck by remember { mutableStateOf(false) }
 
         // Check permission result when user returns from the system permission dialog
@@ -746,6 +750,7 @@ object SettingsDictionaryScreen : SearchableSettings {
                                         onValueChange = { newDisplayValue ->
                                             setFieldValue(fieldName, newDisplayValue, false)
                                         },
+                                        dictionaryNames = dictionaries,
                                     )
                                 }
 
@@ -772,6 +777,7 @@ object SettingsDictionaryScreen : SearchableSettings {
                                         onDeleteField = {
                                             removeCustomField(fieldName)
                                         },
+                                        dictionaryNames = dictionaries,
                                     )
                                 }
 
@@ -911,8 +917,10 @@ object SettingsDictionaryScreen : SearchableSettings {
         fieldValue: String,
         onValueChange: (String) -> Unit,
         onDeleteField: (() -> Unit)? = null,
+        dictionaryNames: List<String> = emptyList(),
     ) {
         var dropdownExpanded by remember { mutableStateOf(false) }
+        var singleGlossaryExpanded by remember { mutableStateOf(false) }
         val currentMarkers = remember(fieldValue) { parseMarkersForDisplay(fieldValue) }
 
         Column(
@@ -979,32 +987,109 @@ object SettingsDictionaryScreen : SearchableSettings {
                 modifier = Modifier.width(200.dp),
             ) {
                 Marker.ALL.forEach { marker ->
-                    val isSelected = marker in currentMarkers
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = markerDisplayLabels[marker] ?: marker,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        },
-                        onClick = {
-                            val normalizedValue = fieldValue.replace("<br>", "")
-                            val newValue = if (isSelected) {
-                                normalizedValue.replace("{$marker}", "")
-                            } else {
-                                normalizedValue + "{$marker}"
+                    if (marker == Marker.SINGLE_GLOSSARY) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = markerDisplayLabels[marker] ?: marker,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            },
+                            onClick = {
+                                if (dictionaryNames.isNotEmpty()) {
+                                    singleGlossaryExpanded = true
+                                }
+                            },
+                            trailingIcon = {
+                                if (dictionaryNames.isNotEmpty()) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            },
+                        )
+
+                        if (singleGlossaryExpanded) {
+                            dictionaryNames.forEach { dictName ->
+                                DropdownMenuItem(
+                                    text = { Text(dictName, style = MaterialTheme.typography.bodyMedium) },
+                                    onClick = {
+                                        val markerStr = "{${Marker.SINGLE_GLOSSARY}-$dictName}"
+                                        val normalizedValue = fieldValue.replace("<br>", "")
+                                        val newValue = if (normalizedValue.contains(markerStr)) {
+                                            normalizedValue.replace(markerStr, "")
+                                        } else {
+                                            normalizedValue + markerStr
+                                        }
+                                        onValueChange(newValue)
+                                        singleGlossaryExpanded = false
+                                        dropdownExpanded = false
+                                    },
+                                    leadingIcon = {
+                                        val markerStr = "{${Marker.SINGLE_GLOSSARY}-$dictName}"
+                                        androidx.compose.material3.Checkbox(
+                                            checked = fieldValue.replace("<br>", "").contains(markerStr),
+                                            onCheckedChange = null,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                )
                             }
-                            onValueChange(newValue)
-                            dropdownExpanded = false
-                        },
-                        leadingIcon = {
-                            androidx.compose.material3.Checkbox(
-                                checked = isSelected,
-                                onCheckedChange = null,
-                                modifier = Modifier.size(20.dp),
+
+                            DropdownMenuItem(
+                                text = { Text("All dictionaries", style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    val markerStr = "{${Marker.SINGLE_GLOSSARY}-all}"
+                                    val normalizedValue = fieldValue.replace("<br>", "")
+                                    val newValue = if (normalizedValue.contains(markerStr)) {
+                                        normalizedValue.replace(markerStr, "")
+                                    } else {
+                                        normalizedValue + markerStr
+                                    }
+                                    onValueChange(newValue)
+                                    singleGlossaryExpanded = false
+                                    dropdownExpanded = false
+                                },
+                                leadingIcon = {
+                                    val markerStr = "{${Marker.SINGLE_GLOSSARY}-all}"
+                                    androidx.compose.material3.Checkbox(
+                                        checked = fieldValue.replace("<br>", "").contains(markerStr),
+                                        onCheckedChange = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
                             )
-                        },
-                    )
+                        }
+                    } else {
+                        val isSelected = marker in currentMarkers
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = markerDisplayLabels[marker] ?: marker,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            },
+                            onClick = {
+                                val normalizedValue = fieldValue.replace("<br>", "")
+                                val newValue = if (isSelected) {
+                                    normalizedValue.replace("{$marker}", "")
+                                } else {
+                                    normalizedValue + "{$marker}"
+                                }
+                                onValueChange(newValue)
+                                dropdownExpanded = false
+                            },
+                            leadingIcon = {
+                                androidx.compose.material3.Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

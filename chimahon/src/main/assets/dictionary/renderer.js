@@ -1217,10 +1217,11 @@
     ankiBtn.title = isAlreadyAdded ? 'Already in Anki' : 'Add to Anki';
     ankiBtn.setAttribute('data-index', String(result.index || 0));
     ankiBtn.setAttribute('data-expression', expression);
+    ankiBtn.setAttribute('data-glossary', '-1');
     ankiBtn.onclick = (e) => {
       e.stopPropagation();
       if (typeof AnkiBridge !== 'undefined') {
-        AnkiBridge.addToAnki(ankiBtn.getAttribute('data-index'));
+        AnkiBridge.addToAnki(ankiBtn.getAttribute('data-index'), '-1');
       }
     };
     headSection.appendChild(ankiBtn);
@@ -1280,10 +1281,14 @@
       ankiBtn.title = isAlreadyAdded ? 'Already in Anki' : 'Add to Anki';
       ankiBtn.setAttribute('data-index', String(result.index || 0));
       ankiBtn.setAttribute('data-expression', expression);
+      ankiBtn.setAttribute('data-glossary', String(i));
       ankiBtn.onclick = (e) => {
         e.stopPropagation();
         if (typeof AnkiBridge !== 'undefined') {
-          AnkiBridge.addToAnki(ankiBtn.getAttribute('data-index'));
+          AnkiBridge.addToAnki(
+            ankiBtn.getAttribute('data-index'),
+            ankiBtn.getAttribute('data-glossary')
+          );
         }
       };
       headSection.appendChild(ankiBtn);

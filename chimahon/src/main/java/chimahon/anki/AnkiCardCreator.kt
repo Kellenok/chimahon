@@ -70,6 +70,7 @@ object Marker {
     const val MANGA = "manga"
     const val CHAPTER = "chapter"
     const val MEDIA = "media"
+    const val SINGLE_GLOSSARY = "single-glossary"
 
     val ALL: List<String> = listOf(
         EXPRESSION, READING, FURIGANA, FURIGANA_PLAIN,
@@ -81,6 +82,7 @@ object Marker {
         FREQUENCIES, FREQUENCY_HARMONIC_RANK, FREQUENCY_AVERAGE_RANK,
         PITCH_ACCENTS, PITCH_ACCENT_POSITIONS, PITCH_ACCENT_CATEGORIES,
         MANGA, CHAPTER, MEDIA,
+        SINGLE_GLOSSARY,
     )
 
     val ALL_WITH_TODO: List<String> = ALL + listOf(AUDIO, SCREENSHOT, SEARCH_QUERY)
@@ -156,21 +158,28 @@ object AnkiCardCreator {
         sentence: String = "",
         offset: Int = -1,
         media: MediaInfo? = null,
-        groupTerms: Boolean = true,
         screenshotBytes: ByteArray? = null,
+        glossaryIndex: Int? = null,
     ): AnkiResult {
-        android.util.Log.d(TAG, "addToAnki: deck=$deck, model=$model, fieldMapJson=$fieldMapJson")
+        android.util.Log.d(TAG, "addToAnki: deck=$deck, model=$model, fieldMapJson=$fieldMapJson, glossaryIndex=$glossaryIndex")
         
         if (deck.isBlank() || model.isBlank()) {
             android.util.Log.w(TAG, "addToAnki: NotConfigured - deck or model is blank")
             return AnkiResult.NotConfigured
         }
 
+        // glossaryIndex >= 0 means export specific glossary; null or negative means export all
+        val filteredResult = if (glossaryIndex != null && glossaryIndex >= 0) {
+            filterToSingleGlossary(result, glossaryIndex)
+        } else {
+            result
+        }
+
         val bridge = AnkiDroidBridge(context)
         val fieldMap = parseFieldMap(fieldMapJson)
         android.util.Log.d(TAG, "addToAnki: parsed fieldMap=$fieldMap")
         val cloze = if (sentence.isNotEmpty() && offset >= 0) {
-            buildCloze(sentence, offset, result.term.expression, result.term.reading)
+            buildCloze(sentence, offset, filteredResult.term.expression, filteredResult.term.reading)
         } else {
             null
         }
@@ -188,12 +197,12 @@ object AnkiCardCreator {
             }
         }
 
-        val fields = buildFields(result, fieldMap, cloze, media, groupTerms, screenshotFilename)
+        val fields = buildFields(filteredResult, fieldMap, cloze, media, screenshotFilename)
         android.util.Log.d(TAG, "addToAnki: built fields=$fields")
         val tagList = tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
 
         if (dupCheck) {
-            val existing = bridge.findNotes(result.term.expression, model)
+            val existing = bridge.findNotes(filteredResult.term.expression, model)
             if (existing.isNotEmpty()) {
                 when (dupAction) {
                     "prevent" -> return AnkiResult.CardExists(existing.first())
@@ -207,6 +216,16 @@ object AnkiCardCreator {
 
         bridge.addNote(deckName = deck, modelName = model, fields = fields, tags = tagList)
         return AnkiResult.Success
+    }
+
+    private fun filterToSingleGlossary(result: LookupResult, glossaryIndex: Int): LookupResult {
+        val glossary = result.term.glossaries.getOrNull(glossaryIndex) ?: return result
+        val filteredGlossaries = arrayOf(glossary)
+        return result.copy(
+            term = result.term.copy(
+                glossaries = filteredGlossaries,
+            )
+        )
     }
 
     suspend fun checkExistingCards(context: Context, expressions: List<String>, modelName: String): Set<String> {
@@ -273,17 +292,16 @@ object AnkiCardCreator {
         fieldMap: Map<String, String>,
         cloze: Cloze? = null,
         media: MediaInfo? = null,
-        groupTerms: Boolean = true,
         screenshotFilename: String? = null,
     ): Map<String, String> = fieldMap.mapValues { (_, template) ->
-        formatField(template, result, cloze, media, groupTerms, screenshotFilename)
+        formatField(template, result, cloze, media, screenshotFilename)
     }
 
-    private fun formatField(template: String, result: LookupResult, cloze: Cloze?, media: MediaInfo?, groupTerms: Boolean, screenshotFilename: String?): String {
+    private fun formatField(template: String, result: LookupResult, cloze: Cloze?, media: MediaInfo?, screenshotFilename: String?): String {
         if (template.isBlank()) return ""
         val spacedTemplate = template.replace("}{", "} {")
         return MARKER_PATTERN.replace(spacedTemplate) { match ->
-            renderMarker(match.groupValues[1], result, cloze, media, groupTerms, screenshotFilename)
+            renderMarker(match.groupValues[1], result, cloze, media, screenshotFilename)
         }
     }
 
@@ -340,39 +358,35 @@ object AnkiCardCreator {
     // Marker rendering
     // =============================================================================
 
-    fun renderMarker(marker: String, result: LookupResult, cloze: Cloze? = null, media: MediaInfo? = null, groupTerms: Boolean = true, screenshotFilename: String? = null): String = when (marker) {
+    fun renderMarker(marker: String, result: LookupResult, cloze: Cloze? = null, media: MediaInfo? = null, screenshotFilename: String? = null): String = when (marker) {
         Marker.EXPRESSION -> result.term.expression
         Marker.READING -> result.term.reading
         Marker.FURIGANA -> buildFuriganaHtml(result.term.expression, result.term.reading)
         Marker.FURIGANA_PLAIN -> buildFuriganaPlain(result.term.expression, result.term.reading)
-        Marker.GLOSSARY -> buildGlossary(result.term.glossaries, brief = false, noDictTag = false, firstOnly = false, groupTerms = groupTerms)
+        Marker.GLOSSARY -> buildGlossary(result.term.glossaries, brief = false, noDictTag = false, firstOnly = false)
         Marker.GLOSSARY_BRIEF -> buildGlossary(
             result.term.glossaries,
             brief = true,
             noDictTag = false,
             firstOnly = false,
-            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_NO_DICT -> buildGlossary(
             result.term.glossaries,
             brief = false,
             noDictTag = true,
             firstOnly = false,
-            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_FIRST -> buildGlossary(
             result.term.glossaries,
             brief = false,
             noDictTag = false,
             firstOnly = true,
-            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_FIRST_BRIEF -> buildGlossary(
             result.term.glossaries,
             brief = true,
             noDictTag = false,
             firstOnly = true,
-            groupTerms = groupTerms,
         )
         Marker.GLOSSARY_PLAIN -> buildGlossaryPlain(result.term.glossaries, noDictTag = false)
         Marker.SENTENCE -> cloze?.sentence ?: ""
@@ -540,7 +554,6 @@ object AnkiCardCreator {
         noDictTag: Boolean,
         firstOnly: Boolean,
         dictionaryFilter: String? = null,
-        groupTerms: Boolean = true,
     ): String {
         if (glossaries.isEmpty()) return ""
 
@@ -556,13 +569,7 @@ object AnkiCardCreator {
         val sb = StringBuilder()
         sb.append("""<div style="text-align: left;" class="yomitan-glossary">""")
 
-        if (!groupTerms && entries.size > 1) {
-            for (entry in entries) {
-                sb.append("""<div class="glossary-entry">""")
-                sb.append(renderGlossarySingle(entry, brief, noDictTag))
-                sb.append("</div>")
-            }
-        } else if (entries.size == 1) {
+        if (entries.size == 1) {
             sb.append(renderGlossarySingle(entries[0], brief, noDictTag))
         } else {
             sb.append("<ol>")

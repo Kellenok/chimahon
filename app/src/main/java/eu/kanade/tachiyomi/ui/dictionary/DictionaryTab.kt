@@ -141,13 +141,12 @@ data object DictionaryTab : Tab {
         val ankiDupScope by dictionaryPreferences.ankiDuplicateScope().collectAsState()
         val ankiDupAction by dictionaryPreferences.ankiDuplicateAction().collectAsState()
         val ankiTags by dictionaryPreferences.ankiDefaultTags().collectAsState()
-        val showFrequencyHarmonic by dictionaryPreferences.showFrequencyHarmonic().collectAsState()
-        val groupTerms by dictionaryPreferences.groupTerms().collectAsState()
+        val showFreqHarmonic by dictionaryPreferences.showFrequencyHarmonic().collectAsState()
 
-        // Simple callback for Anki lookup - index maps to results array
-        val onAnkiLookup: ((Int) -> Unit)? = if (ankiEnabled) {
-            { index ->
-                val result = results.getOrNull(index)
+        // Simple callback for Anki lookup - index maps to results array, glossaryIndex is optional
+        val onAnkiLookup: ((Int, Int?) -> Unit)? = if (ankiEnabled) {
+            { resultIndex, glossaryIndex ->
+                val result = results.getOrNull(resultIndex)
                 if (result != null) {
                     scope.launch {
                         val ankiResult = AnkiCardCreator.addToAnki(
@@ -160,7 +159,7 @@ data object DictionaryTab : Tab {
                             dupCheck = ankiDupCheck,
                             dupScope = ankiDupScope,
                             dupAction = ankiDupAction,
-                            groupTerms = groupTerms,
+                            glossaryIndex = glossaryIndex,
                         )
                         when (ankiResult) {
                             is AnkiResult.Success -> context.toast(MR.strings.anki_card_added)
@@ -294,8 +293,7 @@ data object DictionaryTab : Tab {
                         } else {
                             "Search to view dictionary entries"
                         },
-                        showFrequencyHarmonic = showFrequencyHarmonic,
-                        groupTerms = groupTerms,
+                        showFrequencyHarmonic = showFreqHarmonic,
                         existingExpressions = existingExpressions,
                         webViewProvider = { context ->
                             retainedWebView ?: WebView(context).also { retainedWebView = it }

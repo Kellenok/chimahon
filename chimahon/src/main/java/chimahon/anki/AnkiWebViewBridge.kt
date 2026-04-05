@@ -1,18 +1,20 @@
 package chimahon.anki
 
 import android.webkit.JavascriptInterface
+import chimahon.GlossaryEntry
 import chimahon.LookupResult
 
 class AnkiWebViewBridge(
     private val resultsProvider: () -> List<LookupResult>,
-    private val onAddToAnki: (LookupResult) -> Unit,
+    private val onAddToAnki: (LookupResult, Int?) -> Unit,
 ) {
     @JavascriptInterface
-    fun addToAnki(indexStr: String) {
-        val index = indexStr.toIntOrNull() ?: return
+    fun addToAnki(resultIndexStr: String, glossaryIndexStr: String) {
+        val resultIndex = resultIndexStr.toIntOrNull() ?: return
+        val glossaryIndex = glossaryIndexStr.toIntOrNull()
         val results = resultsProvider()
-        if (index in results.indices) {
-            onAddToAnki(results[index])
+        if (resultIndex in results.indices) {
+            onAddToAnki(results[resultIndex], glossaryIndex)
         }
     }
 }
@@ -25,14 +27,15 @@ class AnkiWebViewBridge(
 class DelegatingWebViewBridge(
     private val resultsProvider: () -> List<LookupResult>,
 ) {
-    var onAddToAnki: ((LookupResult) -> Unit)? = null
+    var onAddToAnki: ((LookupResult, Int?) -> Unit)? = null
 
     @JavascriptInterface
-    fun addToAnki(indexStr: String) {
-        val index = indexStr.toIntOrNull() ?: return
+    fun addToAnki(resultIndexStr: String, glossaryIndexStr: String) {
+        val resultIndex = resultIndexStr.toIntOrNull() ?: return
+        val glossaryIndex = glossaryIndexStr.toIntOrNull()
         val results = resultsProvider()
-        if (index in results.indices) {
-            onAddToAnki?.invoke(results[index])
+        if (resultIndex in results.indices) {
+            onAddToAnki?.invoke(results[resultIndex], glossaryIndex)
         }
     }
 }
