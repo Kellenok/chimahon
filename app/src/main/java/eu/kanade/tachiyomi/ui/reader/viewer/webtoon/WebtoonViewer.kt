@@ -63,6 +63,8 @@ class WebtoonViewer(
         ) -> Unit
     )? = null
 
+    var onDismissOcrPopup: (() -> Unit)? = null
+
     private val scope = MainScope()
 
     /**
@@ -147,7 +149,26 @@ class WebtoonViewer(
                 }
             },
         )
-        recycler.tapListener = { event ->
+        recycler.tapListener = f@{ event ->
+            val rx = event.rawX
+            val ry = event.rawY
+            val child = recycler.findChildViewUnder(event.x, event.y)
+            if (child != null) {
+                val holder = recycler.getChildViewHolder(child) as? WebtoonPageHolder
+                if (holder != null) {
+                    val loc = IntArray(2)
+                    child.getLocationOnScreen(loc)
+                    val localX = rx - loc[0]
+                    val localY = ry - loc[1]
+                    if (localX >= 0 && localX <= child.width &&
+                        localY >= 0 && localY <= child.height &&
+                        holder.isPointOnOcrBlock(localX, localY)
+                    ) {
+                        return@f
+                    }
+                }
+            }
+
             val viewPosition = IntArray(2)
             recycler.getLocationOnScreen(viewPosition)
             val viewPositionRelativeToWindow = IntArray(2)

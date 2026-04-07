@@ -23,6 +23,7 @@ import android.view.View
 import android.view.View.LAYER_TYPE_HARDWARE
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -566,6 +567,10 @@ class ReaderActivity : BaseActivity() {
             }
         }
 
+        BackHandler(enabled = ocrPopupState != null) {
+            ocrPopupState = null
+        }
+
         // OCR Dictionary Popup
         ocrPopupState?.let { popupState ->
             val dismissPopup = {
@@ -613,6 +618,11 @@ class ReaderActivity : BaseActivity() {
                         }
                     }
                 }
+                if (viewer.onDismissOcrPopup == null) {
+                    viewer.onDismissOcrPopup = {
+                        runOnUiThread { ocrPopupState = null }
+                    }
+                }
             }
             is WebtoonViewer -> {
                 if (viewer.onShowOcrPopup == null) {
@@ -630,6 +640,11 @@ class ReaderActivity : BaseActivity() {
                             ocrPopupState =
                                 OcrPopupState(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot)
                         }
+                    }
+                }
+                if (viewer.onDismissOcrPopup == null) {
+                    viewer.onDismissOcrPopup = {
+                        runOnUiThread { ocrPopupState = null }
                     }
                 }
             }

@@ -42,7 +42,6 @@ class OcrSubsamplingImageView(
 
     // Gesture detector for tap handling
     private val gestureDetector = GestureDetector(context, OcrGestureListener())
-    private var pagerGestureSuppressed = false
 
     // Cache hit test result to avoid redundant calculations during a single gesture
     private var cachedHitBlock: OcrTextBlock? = null
@@ -56,6 +55,8 @@ class OcrSubsamplingImageView(
 
     // Webtoon mode keeps scroll/zoom gestures in RecyclerView instead of SSIV.
     var forwardTouchToSuper: Boolean = true
+
+    var dismissHandledInThisGesture = false
 
     // Text paint for rendering OCR text
     private val textPaint = TextPaint().apply {
@@ -411,6 +412,7 @@ class OcrSubsamplingImageView(
             suppressSuperForGesture = false
             downOnOcrBox = false
             swipeReleased = false
+            dismissHandledInThisGesture = false
         }
 
         // On ACTION_DOWN, check if we hit an OCR block and cache the result
@@ -428,15 +430,12 @@ class OcrSubsamplingImageView(
             // This avoids waiting for single-tap confirmation and makes swipe/press feel instant.
             if (cachedHitBlock == null && host?.activeOcrBlock != null) {
                 host.dismissActiveOcrBlock()
+                dismissHandledInThisGesture = true
             }
 
             if (downOnOcrBox) {
                 // Temporarily capture while we decide tap vs swipe.
                 parent?.requestDisallowInterceptTouchEvent(true)
-                if (forwardTouchToSuper) {
-                    findParentPager()?.setGestureDetectorEnabled(false)
-                    pagerGestureSuppressed = true
-                }
             }
         }
 
@@ -449,10 +448,6 @@ class OcrSubsamplingImageView(
                 downOnOcrBox = false
                 suppressSuperForGesture = false
                 parent?.requestDisallowInterceptTouchEvent(false)
-                if (pagerGestureSuppressed) {
-                    findParentPager()?.setGestureDetectorEnabled(true)
-                    pagerGestureSuppressed = false
-                }
             }
         }
 
@@ -471,10 +466,6 @@ class OcrSubsamplingImageView(
         }
 
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
-            if (pagerGestureSuppressed) {
-                findParentPager()?.setGestureDetectorEnabled(true)
-                pagerGestureSuppressed = false
-            }
             parent?.requestDisallowInterceptTouchEvent(false)
             // Clear hit test cache
             cachedHitBlock = null
@@ -548,13 +539,13 @@ class OcrSubsamplingImageView(
             ny >= (scaledYMin - nyPadding) && ny <= (scaledYMax + nyPadding)
     }
 
-    private fun findParentPager(): Pager? {
-        var current = parent
-        while (current != null) {
-            if (current is Pager) return current
-            current = current.parent
-        }
-        return null
+    /**
+     * Test if a screen point lies within any OCR block.
+     * Used by external viewers (pager/webtoon) to filter tap gestures.
+     */
+    fun isPointOnActiveOrAnyOcrBlock(viewX: Float, viewY: Float): Boolean {
+        // Can be called by outside viewers
+        return hitTestSource(viewX, viewY) != null
     }
 
     // ==================== Gesture Listener ====================

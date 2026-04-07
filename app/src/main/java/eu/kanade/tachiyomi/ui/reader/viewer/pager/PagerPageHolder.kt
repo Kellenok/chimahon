@@ -89,6 +89,9 @@ class PagerPageHolder(
         onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot ->
             viewer.onShowOcrPopup?.invoke(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot)
         }
+        onDismissOcrPopup = {
+            viewer.onDismissOcrPopup?.invoke()
+        }
     }
 
     /**
