@@ -58,6 +58,8 @@ abstract class PagerViewer(
         ) -> Unit
     )? = null
 
+    var onDismissOcrPopup: (() -> Unit)? = null
+
     /**
      * View pager used by this viewer. It's abstract to implement L2R, R2L and vertical pagers on
      * top of this class.
@@ -133,7 +135,22 @@ abstract class PagerViewer(
         pager.id = R.id.reader_pager
         pager.adapter = adapter
         pager.addOnPageChangeListener(pagerListener)
-        pager.tapListener = { event ->
+        pager.tapListener = f@{ event ->
+            val rx = event.rawX
+            val ry = event.rawY
+            val isOcrTap = pager.children
+                .filterIsInstance<PagerPageHolder>()
+                .any { holder ->
+                    val loc = IntArray(2)
+                    holder.getLocationOnScreen(loc)
+                    val localX = rx - loc[0]
+                    val localY = ry - loc[1]
+                    localX >= 0 && localX <= holder.width &&
+                        localY >= 0 && localY <= holder.height &&
+                        holder.isPointOnOcrBlock(localX, localY)
+                }
+            if (isOcrTap) return@f
+
             val viewPosition = IntArray(2)
             pager.getLocationOnScreen(viewPosition)
             val viewPositionRelativeToWindow = IntArray(2)

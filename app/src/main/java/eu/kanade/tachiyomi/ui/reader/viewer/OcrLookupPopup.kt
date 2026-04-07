@@ -285,59 +285,50 @@ fun OcrLookupPopup(
     val outsideTapInteraction = remember { MutableInteractionSource() }
 
     Popup(
-        alignment = Alignment.TopStart,
+        offset = IntOffset(position.x.roundToInt(), position.y.roundToInt()),
         onDismissRequest = { onDismiss() },
         properties = PopupProperties(
-            focusable = true,
-            dismissOnClickOutside = false,
+            focusable = false,
+            dismissOnClickOutside = true,
         ),
     ) {
-        Box(modifier = modifier.fillMaxSize()) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        indication = null,
-                        interactionSource = outsideTapInteraction,
-                    ) { onDismiss() },
-                color = Color.Transparent,
-            ) {
-            }
-
-            Surface(
-                modifier = Modifier
-                    .offset { IntOffset(position.x.roundToInt(), position.y.roundToInt()) }
-                    .width(maxWidthDp)
-                    .height(maxHeightDp),
-                shape = MaterialTheme.shapes.medium,
-                tonalElevation = 6.dp,
-                shadowElevation = 6.dp,
-            ) {
-                when {
-                    isLoading -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
+        Surface(
+            modifier = modifier
+                .width(maxWidthDp)
+                .height(maxHeightDp)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                ) {
+                    // Consume taps on the popup itself to prevent them from falling through to the reader
+                },
+            shape = MaterialTheme.shapes.medium,
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
                     }
-                    errorMessage != null -> {}
-                    results.isEmpty() -> {}
-                    else -> {
-                        DictionaryEntryWebView(
-                            results = results,
-                            styles = styles,
-                            mediaDataUris = mediaDataUris,
-                            placeholder = "",
-                            headerText = lookupString.take(20) + if (lookupString.length > 20) "…" else "",
-                            popupScale = popupScalePref,
-                            showFrequencyHarmonic = showFreqHarmonic,
-                            groupTerms = groupTerms,
-                            existingExpressions = existingExpressions,
-                            webViewProvider = { webView },
-                            onAnkiLookup = onAnkiLookup,
-                            modifier = Modifier
-                                .fillMaxSize(),
-                        )
-                    }
+                }
+                errorMessage != null -> {}
+                results.isEmpty() -> {}
+                else -> {
+                    DictionaryEntryWebView(
+                        results = results,
+                        styles = styles,
+                        mediaDataUris = mediaDataUris,
+                        placeholder = "",
+                        headerText = lookupString.take(20) + if (lookupString.length > 20) "…" else "",
+                        popupScale = popupScalePref,
+                        showFrequencyHarmonic = showFreqHarmonic,
+                        groupTerms = groupTerms,
+                        existingExpressions = existingExpressions,
+                        webViewProvider = { webView },
+                        onAnkiLookup = onAnkiLookup,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }

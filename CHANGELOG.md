@@ -6,7 +6,18 @@ The format follows a Keep a Changelog style and uses Semantic Versioning.
 
 ## [Unreleased]
 
-- No changes yet.
+### Added
+- .mokuro OCR integration for reading .mokuro formatted manga files.
+- Screenshot crop mode for Anki card creation with manual crop selection.
+- Single glossary export with SINGLE_GLOSSARY marker support.
+- Manga, chapter, and media Anki markers for card templates.
+- Group terms toggle for dictionary popup definition grouping.
+
+### Changed
+- Single-tap OCR navigation: tap once on text to activate and show dictionary popup immediately.
+
+### Improved
+- Simplified OCR popup UI with better tap handling.
 
 ## [v1.2.2]
 

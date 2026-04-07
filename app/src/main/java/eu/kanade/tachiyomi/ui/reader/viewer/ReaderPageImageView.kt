@@ -91,6 +91,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 activeOcrBlock = null
                 ocrLayoutCache = null
                 ocrPopupLookupString = null
+                onDismissOcrPopup?.invoke()
             }
             (pageView as? SubsamplingScaleImageView)?.invalidate()
         }
@@ -112,6 +113,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     internal var ocrLayoutCache: Pair<OcrTextBlock, StaticLayout>? = null
 
     var onOcrLookup: ((String) -> Unit)? = null
+    var onDismissOcrPopup: (() -> Unit)? = null
 
     // ==================== Dictionary Popup State ====================
     private var ocrWebView: WebView? = null
@@ -619,6 +621,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         activeOcrBlock = null
         ocrLayoutCache = null
         ocrPopupLookupString = null
+        onDismissOcrPopup?.invoke()
     }
 
     override fun onDetachedFromWindow() {
@@ -635,12 +638,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
             logcat { "OCR dismiss active block on pan/zoom" }
             activeOcrBlock = null
             ocrLayoutCache = null
+            onDismissOcrPopup?.invoke()
             (pageView as? SubsamplingScaleImageView)?.invalidate()
         }
     }
 
     /**
-     * Handle tap on OCR block: first tap activates, second tap triggers lookup.
+     * Check if the given point in view coordinates hits any OCR block.
+     * Used by viewers to filter out generic tap zones.
+     */
+    fun isPointOnOcrBlock(viewX: Float, viewY: Float): Boolean {
+        val ssiv = pageView as? OcrSubsamplingImageView ?: return false
+        return ssiv.dismissHandledInThisGesture || ssiv.isPointOnActiveOrAnyOcrBlock(viewX, viewY)
+    }
+
+    /**
+     * Handle tap on OCR block: activate and immediately trigger dictionary lookup in one tap.
      *
      * Called by [OcrSubsamplingImageView.OcrGestureListener.onSingleTapUp].
      */
@@ -651,58 +664,51 @@ open class ReaderPageImageView @JvmOverloads constructor(
         screenX: Float,
         screenY: Float,
     ): Boolean {
-        val currentActive = activeOcrBlock
-        return if (currentActive == null) {
-            // First tap on this block -> activate and show text
+        val wasActive = activeOcrBlock
+
+        // Activate the block (or switch to it) and redraw the text overlay
+        if (wasActive != block) {
             logcat {
-                "OCR first tap: activate block vertical=${block.vertical} chars=${block.fullText.length} x=$viewX y=$viewY"
+                "OCR tap: activate block vertical=${block.vertical} chars=${block.fullText.length} x=$viewX y=$viewY"
             }
-            activeOcrBlock = block
-            ocrLayoutCache = null
-            (pageView as? SubsamplingScaleImageView)?.invalidate()
-            true
-        } else if (currentActive != block) {
-            // Fast switch: replace active block immediately when tapping another one.
-            logcat { "OCR tap on different block while active; switching active block" }
             activeOcrBlock = block
             ocrLayoutCache = null
             ocrPopupLookupString = null
             (pageView as? SubsamplingScaleImageView)?.invalidate()
-            true
-        } else {
-            // Second tap on active block -> show dictionary popup
-            val ssiv = pageView as? SubsamplingScaleImageView ?: return true
-            val charOffset = getCharOffset(block, viewX, viewY, ssiv) ?: 0
-            if (charOffset !in block.fullText.indices) {
-                logcat(LogPriority.WARN) { "OCR char offset out of bounds: offset=$charOffset len=${block.fullText.length}" }
-                return true
-            }
-            val tappedChar = block.fullText[charOffset]
-            if (!isLookupStartChar(tappedChar)) {
-                logcat { "OCR second tap ignored on punctuation/non-word char '$tappedChar' at offset=$charOffset" }
-                return true
-            }
-            val lookupString = block.fullText.substring(charOffset)
-            logcat {
-                "OCR second tap: lookup offset=$charOffset remainingChars=${lookupString.length} x=$viewX y=$viewY"
-            }
-            if (lookupString.isBlank()) {
-                logcat(LogPriority.WARN) { "OCR lookup string is blank after second tap" }
-                return true
-            }
-
-            ensureOcrResources()
-            val webView = ocrWebView
-            val repository = dictionaryRepository
-            if (webView != null && repository != null) {
-                ocrPopupLookupString = lookupString
-                val screenshot = captureVisibleBitmap()
-                onShowOcrPopup?.invoke(lookupString, block.fullText, charOffset, webView, repository, screenX, screenY, null, screenshot)
-            } else {
-                logcat(LogPriority.WARN) { "OCR popup: webView or repository is null" }
-            }
-            true
         }
+
+        // Immediately trigger dictionary popup at the tapped character position
+        val ssiv = pageView as? SubsamplingScaleImageView ?: return true
+        val charOffset = getCharOffset(block, viewX, viewY, ssiv) ?: 0
+        if (charOffset !in block.fullText.indices) {
+            logcat(LogPriority.WARN) { "OCR char offset out of bounds: offset=$charOffset len=${block.fullText.length}" }
+            return true
+        }
+        val tappedChar = block.fullText[charOffset]
+        if (!isLookupStartChar(tappedChar)) {
+            logcat { "OCR tap ignored on punctuation/non-word char '$tappedChar' at offset=$charOffset" }
+            return true
+        }
+        val lookupString = block.fullText.substring(charOffset)
+        logcat {
+            "OCR tap: lookup offset=$charOffset remainingChars=${lookupString.length} x=$viewX y=$viewY"
+        }
+        if (lookupString.isBlank()) {
+            logcat(LogPriority.WARN) { "OCR lookup string is blank" }
+            return true
+        }
+
+        ensureOcrResources()
+        val webView = ocrWebView
+        val repository = dictionaryRepository
+        if (webView != null && repository != null) {
+            ocrPopupLookupString = lookupString
+            val screenshot = captureVisibleBitmap()
+            onShowOcrPopup?.invoke(lookupString, block.fullText, charOffset, webView, repository, screenX, screenY, null, screenshot)
+        } else {
+            logcat(LogPriority.WARN) { "OCR popup: webView or repository is null" }
+        }
+        return true
     }
 
     private fun isLookupStartChar(char: Char): Boolean {

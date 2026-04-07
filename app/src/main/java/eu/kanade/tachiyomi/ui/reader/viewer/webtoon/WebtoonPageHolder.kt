@@ -97,6 +97,9 @@ class WebtoonPageHolder(
         frame.onShowOcrPopup = { lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot ->
             viewer.onShowOcrPopup?.invoke(lookupString, fullText, charOffset, webView, repository, anchorX, anchorY, mediaInfo, screenshot)
         }
+        frame.onDismissOcrPopup = {
+            viewer.onDismissOcrPopup?.invoke()
+        }
     }
 
     /**
@@ -362,5 +365,13 @@ class WebtoonPageHolder(
             frame.removeView(it.root)
             errorLayout = null
         }
+    }
+
+    /**
+     * Check if the given point in view coordinates hits any OCR block.
+     * Delegates to the underlying ReaderPageImageView.
+     */
+    fun isPointOnOcrBlock(x: Float, y: Float): Boolean {
+        return frame.isPointOnOcrBlock(x, y)
     }
 }
