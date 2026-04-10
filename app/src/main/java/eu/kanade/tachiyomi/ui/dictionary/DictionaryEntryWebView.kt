@@ -18,8 +18,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalContext
 import chimahon.DictionaryStyle
 import chimahon.LookupResult
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+import java.io.File
 import java.io.StringWriter
 import java.nio.charset.StandardCharsets
 
@@ -43,10 +47,11 @@ fun DictionaryEntryWebView(
     onAnkiLookup: ((Int, Int?) -> Unit)? = null,
 ) {
     val isDark = isSystemInDarkTheme()
+    val context = LocalContext.current
 
-    val payload = remember(results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, groupTerms, existingExpressions) {
+    val payload = remember(context, results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, groupTerms, existingExpressions) {
         val buildStart = SystemClock.elapsedRealtime()
-        val result = buildRenderPayload(results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, groupTerms, existingExpressions)
+        val result = buildRenderPayload(context, results, styles, mediaDataUris, placeholder, isDark, showFrequencyHarmonic, groupTerms, existingExpressions)
         Log.i(
             "DictionaryRender",
             "payload_build_ms=${SystemClock.elapsedRealtime() - buildStart} results=${results.size}",
@@ -223,6 +228,7 @@ private class DictionaryWebViewState(
 }
 
 private fun buildRenderPayload(
+    context: Context,
     results: List<LookupResult>,
     styles: List<DictionaryStyle>,
     mediaDataUris: Map<String, String>,
@@ -235,6 +241,20 @@ private fun buildRenderPayload(
     val buffer = StringWriter(4096)
     JsonWriter(buffer).use { w ->
         w.beginObject()
+
+        // Dictionary Priority Order (Titles)
+        val dictionaryPreferences = Injekt.get<DictionaryPreferences>()
+        val currentOrder = dictionaryPreferences.dictionaryOrder().get()
+        val orderedTitles = currentOrder.split(",")
+            .filter { it.isNotBlank() }
+            .map { getDictionaryTitle(context, it) }
+
+        w.name("dictionaryOrder").beginArray()
+        for (title in orderedTitles) {
+            w.value(title)
+        }
+        w.endArray()
+
         w.name("placeholder").value(placeholder)
         w.name("isDark").value(isDark)
         w.name("showFrequencyHarmonic").value(showFrequencyHarmonic)
@@ -395,5 +415,19 @@ internal fun getDictionaryBootstrapHtml(context: Context): String {
 private fun readTextAsset(context: Context, assetPath: String): String {
     return context.assets.open(assetPath).use { input ->
         input.readBytes().toString(StandardCharsets.UTF_8)
+    }
+}
+
+private fun getDictionaryTitle(context: Context, dirName: String): String {
+    val dictionariesDir = File(context.getExternalFilesDir(null), "dictionaries")
+    val dictDir = File(dictionariesDir, dirName)
+    val indexFile = File(dictDir, "index.json")
+    if (!indexFile.exists()) return dirName
+
+    return try {
+        val json = indexFile.readText()
+        org.json.JSONObject(json).optString("title", dirName)
+    } catch (e: Exception) {
+        dirName
     }
 }

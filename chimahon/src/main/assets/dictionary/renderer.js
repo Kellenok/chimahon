@@ -1374,6 +1374,40 @@
 
     const mediaMap = payload.mediaDataUris || {};
     const results = Array.isArray(payload.results) ? payload.results : [];
+    const dictionaryOrder = Array.isArray(payload.dictionaryOrder) ? payload.dictionaryOrder : [];
+
+    if (dictionaryOrder.length > 0) {
+      const priorityMap = new Map();
+      dictionaryOrder.forEach((name, i) => priorityMap.set(name, i));
+      const getPriority = (name) => (priorityMap.has(name) ? priorityMap.get(name) : 999);
+
+      // 1. Sort results (stable sort primarily by matched length, tie-break by dict priority)
+      results.sort((a, b) => {
+        const lenA = (a.matched || '').length;
+        const lenB = (b.matched || '').length;
+        if (lenA !== lenB) return lenB - lenA;
+
+        const prioA = getPriority(a.term?.glossaries?.[0]?.dictName);
+        const prioB = getPriority(b.term?.glossaries?.[0]?.dictName);
+        return prioA - prioB;
+      });
+
+      // 2. Sort nested arrays within each result
+      for (const result of results) {
+        if (result.term) {
+          if (Array.isArray(result.term.glossaries)) {
+            result.term.glossaries.sort((a, b) => getPriority(a.dictName) - getPriority(b.dictName));
+          }
+          if (Array.isArray(result.term.frequencies)) {
+            result.term.frequencies.sort((a, b) => getPriority(a.dictName) - getPriority(b.dictName));
+          }
+          if (Array.isArray(result.term.pitches)) {
+            result.term.pitches.sort((a, b) => getPriority(a.dictName) - getPriority(b.dictName));
+          }
+        }
+      }
+    }
+
     const existingExpressions = Array.isArray(payload.existingExpressions) ? payload.existingExpressions : [];
     const groupTerms = payload.groupTerms !== false;
 
