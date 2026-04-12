@@ -993,38 +993,70 @@
     return link;
   }
 
+  function isKana(ch) {
+    return (ch >= '\u3041' && ch <= '\u3096') || (ch >= '\u30a1' && ch <= '\u30fa') || ch === '々' || ch === 'ヶ';
+  }
+
+  function distributeFurigana(expression, reading) {
+    if (!reading || reading === expression) {
+      return [{text: expression, reading: ''}];
+    }
+
+    let start = 0;
+    while (start < expression.length && start < reading.length && expression[start] === reading[start]) {
+      start++;
+    }
+
+    let endExpression = expression.length - 1;
+    let endReading = reading.length - 1;
+    while (endExpression >= start && endReading >= start && expression[endExpression] === reading[endReading]) {
+      endExpression--;
+      endReading--;
+    }
+
+    const segments = [];
+    if (start > 0) {
+      segments.push({text: expression.substring(0, start), reading: ''});
+    }
+
+    if (endExpression >= start) {
+      segments.push({
+        text: expression.substring(start, endExpression + 1),
+        reading: reading.substring(start, endReading + 1)
+      });
+    }
+
+    if (endExpression < expression.length - 1) {
+      segments.push({text: expression.substring(endExpression + 1), reading: ''});
+    }
+
+    return segments;
+  }
+
   function createHeadwordNode(expression, reading) {
     const headword = document.createElement('span');
     headword.className = 'headword';
 
-    if (reading && reading !== expression) {
-      const ruby = document.createElement('ruby');
-      ruby.className = 'headword-text-container';
+    const segments = distributeFurigana(expression, reading);
 
-      const termNode = document.createElement('span');
-      termNode.className = 'headword-term';
-      termNode.textContent = expression;
+    for (const segment of segments) {
+      if (segment.reading) {
+        const ruby = document.createElement('ruby');
+        ruby.className = 'headword-text-container headword-term';
+        ruby.textContent = segment.text;
 
-      const rt = document.createElement('rt');
-      rt.className = 'headword-reading';
-      rt.textContent = reading;
+        const rt = document.createElement('rt');
+        rt.className = 'headword-furigana';
+        rt.textContent = segment.reading;
 
-      ruby.appendChild(termNode);
-      ruby.appendChild(rt);
-      headword.appendChild(ruby);
-      return headword;
-    }
-
-    const termNode = document.createElement('span');
-    termNode.className = 'headword-term';
-    termNode.textContent = expression;
-    headword.appendChild(termNode);
-
-    if (reading) {
-      const readingNode = document.createElement('span');
-      readingNode.className = 'headword-reading';
-      readingNode.textContent = reading;
-      headword.appendChild(readingNode);
+        ruby.appendChild(rt);
+        headword.appendChild(ruby);
+      } else {
+        const termNode = document.createElement('span');
+        termNode.className = 'headword-term';
+        termNode.textContent = segment.text;
+        headword.appendChild(termNode);
+      }
     }
 
     return headword;

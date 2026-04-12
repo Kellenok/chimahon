@@ -76,6 +76,7 @@ html, body {
   line-height: 1.1;
   font-family: inherit;
   letter-spacing: 0.05em;
+  margin-left: 0;
 }
 
 .inflection-toggle {
@@ -187,6 +188,7 @@ html, body {
 
 .headword-text-container {
   ruby-position: over;
+  ruby-align: center;
 }
 
 .gloss-sc-rp {
