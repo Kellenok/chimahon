@@ -170,6 +170,11 @@
         </activity>
 
         <activity
+            android:name=".ui.library.novels.ChimaReaderActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+
+        <activity
             android:name=".ui.security.UnlockActivity"
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />

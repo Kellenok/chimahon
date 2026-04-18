@@ -1,5 +1,6 @@
 plugins {
     id("mihon.library")
+    id("mihon.library.compose")
     kotlin("android")
     kotlin("plugin.serialization")
 }
@@ -29,4 +30,21 @@ dependencies {
     implementation(kotlinx.coroutines.core)
     implementation(kotlinx.serialization.protobuf)
     implementation(kotlinx.serialization.json)
+    
+    // Compose
+    implementation(compose.activity)
+    implementation(compose.foundation)
+    implementation(compose.material3.core)
+    implementation(compose.material.icons)
+    implementation(compose.animation)
+    implementation(compose.ui.util)
+
+    // ChimaReader
+    implementation(platform(libs.coil.bom))
+    implementation(libs.bundles.coil)
+    implementation(libs.preferencektx)
+    implementation(libs.compose.webview)
+    implementation(libs.jsoup)
+    implementation(libs.datastore.preferences)
+    implementation(libs.bundles.media3)
 }

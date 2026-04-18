@@ -73,6 +73,8 @@ class AppModule(val app: Application) : InjektModule {
     // SY <--
 
     override fun InjektRegistrar.registerInjectables() {
+        com.canopus.chimareader.ui.reader.NovelReaderActivity.activityClass = eu.kanade.tachiyomi.ui.library.novels.ChimaReaderActivity::class.java
+
         addSingleton(app)
 
         addSingletonFactory<SqlDriver> {
