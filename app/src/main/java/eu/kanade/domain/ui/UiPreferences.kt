@@ -80,7 +80,7 @@ class UiPreferences(
 
     fun bottomBarLabels() = preferenceStore.getBoolean("pref_show_bottom_bar_labels", true)
 
-    fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)
+    fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", false)
 
     fun showNavHistory() = preferenceStore.getBoolean("pref_show_history_button", true)
 

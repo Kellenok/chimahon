@@ -32,6 +32,7 @@
     <string name="label_backup">Backup and restore</string>
     <string name="label_data_storage">Data and storage</string>
     <string name="label_dictionary">Dictionary</string>
+    <string name="label_novels">Novels</string>
     <string name="label_stats">Statistics</string>
     <string name="label_migration">Migrate</string>
     <string name="label_extensions">Extensions</string>

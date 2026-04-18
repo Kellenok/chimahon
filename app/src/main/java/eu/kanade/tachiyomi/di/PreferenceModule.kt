@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.dictionary.DictionaryPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import com.canopus.chimareader.data.NovelReaderSettings
 import eu.kanade.tachiyomi.util.system.isDebugBuildType
 import tachiyomi.core.common.preference.AndroidPreferenceStore
 import tachiyomi.core.common.preference.PreferenceStore
@@ -64,6 +65,9 @@ class PreferenceModule(val app: Application) : InjektModule {
         }
         addSingletonFactory {
             DictionaryPreferences(get())
+        }
+        addSingletonFactory {
+            NovelReaderSettings(app)
         }
         addSingletonFactory {
             TrackPreferences(get())

@@ -4,6 +4,16 @@ All notable changes to Chimahon are documented here.
 
 The format follows a Keep a Changelog style and uses Semantic Versioning.
 
+## [v1.4.0]
+
+### Added
+- Novel Reader with lookup
+
+## [v1.3.6]
+
+### Fixed
+- fix: revert broken bitmap capture
+
 ## [v1.3.5]
 
 ### Added
