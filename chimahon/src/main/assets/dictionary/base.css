@@ -366,12 +366,12 @@ td {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--border);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
-  color: var(--accent);
-  opacity: 0.65;
+  color: var(--fg);
+  opacity: 0.5;
   font-size: 18px;
   font-weight: bold;
   line-height: 1;

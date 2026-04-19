@@ -1617,7 +1617,7 @@
       // Check if expression is already in Anki (from payload)
       const isAlreadyAdded = existingSet.includes(expression);
       ankiBtn.className = isAlreadyAdded ? 'anki-add-btn anki-added' : 'anki-add-btn';
-      ankiBtn.textContent = '+';
+      ankiBtn.textContent = isAlreadyAdded ? '✓' : '+';
       ankiBtn.title = isAlreadyAdded ? 'Already in Anki' : 'Add to Anki';
       ankiBtn.setAttribute('data-index', String(result.index || 0));
       ankiBtn.setAttribute('data-expression', expression);
