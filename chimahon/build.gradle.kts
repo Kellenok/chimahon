@@ -47,4 +47,5 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.datastore.preferences)
     implementation(libs.bundles.media3)
+    implementation(libs.logcat)
 }
