@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.viewer.OcrCoordinateMapper
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -74,6 +75,15 @@ class PagerPageHolder(
      */
     private var loadJob: Job? = null
     private var ocrLoadJob: Job? = null
+
+    // Dimensions recorded at merge-time so the OCR mapper can compute offsets correctly.
+    // Only valid when extraPage != null and the merge succeeded (not fullPage / isolatedPage).
+    private var mergedPage1W: Int = 0
+    private var mergedPage1H: Int = 0
+    private var mergedPage2W: Int = 0
+    private var mergedPage2H: Int = 0
+    private var mergedCenterMargin: Int = 0
+    private var mergedIsLTR: Boolean = true
 
     /**
      * Job for loading the page.
@@ -341,6 +351,14 @@ class PagerPageHolder(
         val isLTR = (viewer !is R2LPagerViewer) xor viewer.config.invertDoublePages
         val centerMargin = calculateCenterMargin(imageBitmap.height, imageBitmap2.height)
 
+        // Store dimensions for the OCR mapper
+        mergedPage1W = imageBitmap.width
+        mergedPage1H = imageBitmap.height
+        mergedPage2W = imageBitmap2.width
+        mergedPage2H = imageBitmap2.height
+        mergedCenterMargin = centerMargin
+        mergedIsLTR = isLTR
+
         imageSource.close()
         imageSource2.close()
 
@@ -457,9 +475,7 @@ class PagerPageHolder(
 
         ocrLoadJob?.cancel()
         ocrLoadJob = scope.launch {
-            logcat { "OCR request start: chapter=${page.chapter.chapter.id} page=${page.index}" }
-            val blocks = viewer.activity.viewModel.getOcrBlocks(page)
-            setOcrBlocks(blocks)
+            loadOcrWithTransform()
         }
     }
 
@@ -477,11 +493,86 @@ class PagerPageHolder(
         if (ocrBlocks.isEmpty()) {
             ocrLoadJob?.cancel()
             ocrLoadJob = scope.launch {
-                logcat { "OCR request start: chapter=${page.chapter.chapter.id} page=${page.index}" }
-                val blocks = viewer.activity.viewModel.getOcrBlocks(page)
-                setOcrBlocks(blocks)
+                loadOcrWithTransform()
             }
         }
+    }
+
+    /**
+     * Fetch OCR blocks for the current page(s) and remap coordinates to match the
+     * bitmap that is actually displayed (crop / split / merge).
+     *
+     * Three modes are handled:
+     *   1. **Merge** (extraPage != null, merge succeeded): fetch OCR for both pages,
+     *      project each page's blocks onto the shared merged canvas.
+     *   2. **Split** (dualPageSplit, page is InsertPage or wide): keep only the half
+     *      that is visible and rescale x-coordinates to [0,1].
+     *   3. **Crop** (imageCropBorders): read the image stream, detect crop margins with
+     *      the same algorithm as ImageDecoder's borders.cpp, and shift OCR blocks.
+     *
+     * Modes 2 and 3 can combine (crop applied after split).
+     */
+    private suspend fun loadOcrWithTransform() {
+        val viewModel = viewer.activity.viewModel
+        val cropBordersEnabled = viewer.config.imageCropBorders
+        val dualSplitEnabled = viewer.config.dualPageSplit
+
+        // ── Case 1: Merge mode (two pages combined into one wide bitmap) ────────────
+        val ep = extraPage
+        if (ep != null && mergedPage1W > 0 && !page.fullPage && !page.isolatedPage) {
+            logcat { "OCR merge-mode: page=${page.index} extra=${ep.index}" }
+            val rawBlocks1 = viewModel.getOcrBlocks(page)
+            val rawBlocks2 = viewModel.getOcrBlocks(ep)
+            val merged = OcrCoordinateMapper.mapToMerged(
+                blocks1 = rawBlocks1,
+                page1W = mergedPage1W,
+                page1H = mergedPage1H,
+                blocks2 = rawBlocks2,
+                page2W = mergedPage2W,
+                page2H = mergedPage2H,
+                isLTR = mergedIsLTR,
+                centerMarginPx = mergedCenterMargin,
+            )
+            setOcrBlocks(merged)
+            return
+        }
+
+        // ── Case 2 (+ 3): Split mode / single page ──────────────────────────────────
+        logcat { "OCR request start: chapter=${page.chapter.chapter.id} page=${page.index}" }
+        var blocks = viewModel.getOcrBlocks(page)
+
+        if (dualSplitEnabled && !viewer.config.dualPageRotateToFit) {
+            // Determine which half of the wide image this page shows
+            val keepLeft = when {
+                viewer is L2RPagerViewer && page is InsertPage -> false  // InsertPage = right half in L2R
+                viewer !is L2RPagerViewer && page is InsertPage -> true  // InsertPage = left half in R2L
+                viewer is L2RPagerViewer && page !is InsertPage -> true  // Original = left half in L2R
+                else -> false
+            }.let { side -> if (viewer.config.dualPageInvert) !side else side }
+
+            blocks = OcrCoordinateMapper.mapToSplit(blocks, keepLeft)
+            logcat { "OCR split (keepLeft=$keepLeft): ${blocks.size} blocks after remap" }
+        }
+
+        // ── Case 3: Crop borders ────────────────────────────────────────────────────
+        if (cropBordersEnabled && blocks.isNotEmpty()) {
+            val streamFn = page.stream
+            if (streamFn != null) {
+                blocks = withIOContext {
+                    try {
+                        streamFn().use { stream ->
+                            OcrCoordinateMapper.mapToCropped(blocks, okio.Buffer().readFrom(stream))
+                        }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e) { "OCR crop detection failed, using raw blocks" }
+                        blocks
+                    }
+                }
+                logcat { "OCR crop-remap done: ${blocks.size} blocks" }
+            }
+        }
+
+        setOcrBlocks(blocks)
     }
 
     /**

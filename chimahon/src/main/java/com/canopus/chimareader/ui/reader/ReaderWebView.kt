@@ -4,9 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
-import android.view.View
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -133,7 +133,7 @@ fun ReaderWebView(
                     override fun onReceivedError(
                         view: WebView?,
                         request: WebResourceRequest?,
-                        error: WebResourceError?
+                        error: WebResourceError?,
                     ) {
                         Log.e("ReaderWebView", "onReceivedError: url=${request?.url}, error=$error")
                         if (request?.isForMainFrame == true) {
@@ -150,7 +150,7 @@ fun ReaderWebView(
             v.readerSettings = readerSettings
             v.focusMode = focusMode
             v.setBackgroundColor(readerSettings.backgroundColor)
-            
+
             Log.d("ReaderWebView", "update: isImageOnly=$isImageOnly")
 
             if (pendingCommands.isEmpty()) {
@@ -177,10 +177,11 @@ fun ReaderWebView(
                         val oldSettings = v.readerSettings
                         val newSettings = command.settings
                         v.readerSettings = newSettings
-                        
+
                         // Layout-critical changes require a full re-injection (reload)
-                        if (oldSettings.avoidPageBreak != newSettings.avoidPageBreak || 
-                            oldSettings.verticalWriting != newSettings.verticalWriting) {
+                        if (oldSettings.avoidPageBreak != newSettings.avoidPageBreak ||
+                            oldSettings.verticalWriting != newSettings.verticalWriting
+                        ) {
                             v.injectReader()
                         } else {
                             v.applySettings(newSettings)
@@ -192,7 +193,7 @@ fun ReaderWebView(
                     else -> { /* ignore other commands for now */ }
                 }
             }
-        }
+        },
     )
 }
 
@@ -230,24 +231,24 @@ private class ReaderAndroidWebView(
                 e1: MotionEvent?,
                 e2: MotionEvent,
                 velocityX: Float,
-                velocityY: Float
+                velocityY: Float,
             ): Boolean {
                 val start = e1 ?: return false
                 val deltaX = e2.x - start.x
                 val deltaY = e2.y - start.y
-                
+
                 val isVerticalSwipe = kotlin.math.abs(deltaY) > kotlin.math.abs(deltaX)
-                
+
                 // Continuous horizontal text overflows vertically, requiring vertical swipes
                 val expectsVerticalSwipe = continuousMode && !readerSettings.verticalWriting
-                
+
                 if (isVerticalSwipe != expectsVerticalSwipe) {
                     return false
                 }
-                
+
                 val primaryDelta = if (isVerticalSwipe) deltaY else deltaX
                 val primaryVelocity = if (isVerticalSwipe) velocityY else velocityX
-                
+
                 if (kotlin.math.abs(primaryDelta) < swipeThreshold.toFloat()) {
                     return false
                 }
@@ -266,7 +267,7 @@ private class ReaderAndroidWebView(
                     handleSwipe(forward = deltaX < 0f)
                 }
             }
-        }
+        },
     )
 
     private val jsBridge = ReaderJavascriptBridge(
@@ -295,11 +296,11 @@ private class ReaderAndroidWebView(
                     val density = context.resources.displayMetrics.density
                     val eventX = x * density
                     val eventY = y * density
-                    
+
                     // 1. HUD Toggle on top/bottom tapZonePx (e.g. 64dp)
                     if (eventY < tapZonePx || eventY > height - tapZonePx) {
                         onTapTop()
-                    } 
+                    }
                     // 2. Navigation on side tap zones
                     else if (eventX < width * (readerSettings.tapZonePercent / 100f)) {
                         // Left Tap: RTL Forward, LTR Backward
@@ -310,7 +311,7 @@ private class ReaderAndroidWebView(
                     }
                 }
             }
-        }
+        },
     )
 
     init {
@@ -322,20 +323,20 @@ private class ReaderAndroidWebView(
     fun loadChapter(url: String) {
         Log.d("ReaderWebView", "loadChapter called: url=$url, width=$width, height=$height")
         currentUrl = url
-        
+
         if (width <= 0 || height <= 0) {
             postDelayed(Runnable { loadChapter(url) }, 100L)
             return
         }
-        
+
         try {
             visibility = View.INVISIBLE
-            
+
             // Handle file URLs - use loadUrl for proper resource loading
             if (url.startsWith("file://") || !url.contains("://")) {
                 val filePath = url.removePrefix("file://")
                 val file = File(filePath)
-                
+
                 if (file.exists()) {
                     // Use loadUrl to properly load external resources (CSS, images)
                     loadUrl(url)
@@ -354,7 +355,7 @@ private class ReaderAndroidWebView(
 
     fun applySettings(settings: ReaderSettings) {
         Log.d("ReaderWebView", "applySettings: fontSize=${settings.fontSize}, theme=${settings.theme}, padding=${settings.horizontalPadding}x${settings.verticalPadding}")
-        
+
         // Trigger full reload on mode switch to prevent layout artifacts
         if (settings.continuousMode != continuousMode) {
             continuousMode = settings.continuousMode
@@ -368,46 +369,55 @@ private class ReaderAndroidWebView(
                 return
             }
         }
-        
+
         readerSettings = settings
         val bgColor = String.format("#%06X", 0xFFFFFF and settings.backgroundColor)
         val textColor = String.format("#%06X", 0xFFFFFF and settings.textColor)
-        
+
         setBackgroundColor(settings.backgroundColor)
-        
+
         val script = """
             (function() {
                 var b = document.body;
                 if (!b) return;
-                
+
                 // Font size
                 b.style.setProperty('font-size', '${settings.fontSize}px', 'important');
-                
+
                 // Line height
                 b.style.setProperty('line-height', '${settings.lineHeight}', 'important');
-                
+
                 // Apply to wrapper div instead of body
                 var wrapper = document.getElementById('hoshi-content-wrapper');
                 if (!wrapper) return;
-                
+
                 var iw = window.innerWidth;
                 var ih = window.innerHeight;
                 var hPad = Math.round(iw * ${settings.horizontalPadding} / 100);
                 var vPad = Math.round(ih * ${settings.verticalPadding} / 100);
+
+                // Use box-decoration-break: clone to make padding apply to every page (column)
+                // without touching the body (multicol container) dimensions.
                 wrapper.style.setProperty('padding', vPad + 'px ' + hPad + 'px', 'important');
+                wrapper.style.setProperty('-webkit-box-decoration-break', 'clone', 'important');
+                wrapper.style.setProperty('box-decoration-break', 'clone', 'important');
+
+                // Ensure body has no padding to avoid duplication and pagination issues
+                b.style.setProperty('padding', '0', 'important');
+
                 wrapper.style.setProperty('font-size', '${settings.fontSize}px', 'important');
-                
+
                 // Advanced layout settings (line-height, letter-spacing) - only when layoutAdvanced is enabled
                 var adv = ${if (settings.layoutAdvanced) "true" else "false"};
                 if (adv) {
                     wrapper.style.setProperty('line-height', '${settings.lineHeight}', 'important');
                     wrapper.style.setProperty('letter-spacing', '${settings.characterSpacing}em', 'important');
                 }
-                
+
                 // Text alignment
                 var justify = ${if (settings.justifyText) "true" else "false"};
                 wrapper.style.setProperty('text-align', justify ? 'justify' : 'left', 'important');
-                
+
                 // Avoid page break inside elements
                 var avoidBreak = ${if (settings.avoidPageBreak) "true" else "false"};
                 if (avoidBreak) {
@@ -415,7 +425,7 @@ private class ReaderAndroidWebView(
                     style.textContent = 'img, svg, figure, table, tr, td, th { break-inside: avoid !important; -webkit-column-break-inside: avoid !important; page-break-inside: avoid !important; }';
                     document.head.appendChild(style);
                 }
-                
+
                 // HideFurigna
                 var hideFurigana = ${if (settings.hideFurigana) "true" else "false"};
                 var furiganaStyle = document.getElementById('hoshi-furigana-style');
@@ -437,14 +447,14 @@ private class ReaderAndroidWebView(
                 } else {
                     document.body.style.setProperty('writing-mode', 'horizontal-tb', 'important');
                 }
-                
+
                 // Add @font-face for custom fonts
                 var fontUrl = '${settings.fontUrl}';
                 if (fontUrl && fontUrl.length > 0) {
                     var fontFace = document.createElement('style');
                     fontFace.textContent = "@font-face { font-family: 'HoshiCustomFont'; src: url('" + fontUrl + "'); }";
                     document.head.appendChild(fontFace);
-                    
+
                     document.fonts.ready.then(function() {
                         wrapper.style.setProperty('font-family', 'HoshiCustomFont', 'important');
                     });
@@ -455,7 +465,7 @@ private class ReaderAndroidWebView(
                     wrapper.style.setProperty('font-family', fontFamily, 'important');
                 }
                 wrapper.style.setProperty('color', tc, 'important');
-                
+
                 // Theme / colors - preset themes override custom colors
                 var bg, tc;
                 if ('${settings.theme}' === 'dark') {
@@ -468,23 +478,23 @@ private class ReaderAndroidWebView(
                     bg = '#ffffff';
                     tc = '#000000';
                 } else {
-                    bg = '${bgColor}';
-                    tc = '${textColor}';
+                    bg = '$bgColor';
+                    tc = '$textColor';
                 }
-                
+
                 b.style.setProperty('background-color', bg, 'important');
                 wrapper.style.setProperty('color', tc, 'important');
-                
+
                 document.documentElement.style.setProperty('background-color', bg, 'important');
             })();
         """.trimIndent()
-        
+
         evaluateJavascript(script, null)
     }
 
     fun injectReader() {
         Log.d("ReaderWebView", "injectReader called: width=$width, height=$height, continuousMode=$continuousMode, isImageOnly=$isImageOnly")
-        
+
         if (height <= 0 || width <= 0) {
             post { injectReader() }
             return
@@ -493,7 +503,7 @@ private class ReaderAndroidWebView(
         val css = """
             html { margin: 0 !important; padding: 0 !important; }
             html::-webkit-scrollbar { display: none !important; }
-            
+
             img { max-width: 100%; height: auto; }
             svg { max-width: 100%; height: auto; }
             p { break-inside: avoid; }
@@ -537,12 +547,12 @@ private class ReaderAndroidWebView(
                 document.documentElement.style.cssText =
                     'margin:0!important;padding:0!important;' +
                     'width:' + w + 'px!important;height:' + h + 'px!important;' +
-                    'overflow:hidden!important;background:${bg}!important;';
+                    'overflow:hidden!important;background:$bg!important;';
                 document.body.style.cssText =
                     'margin:0!important;padding:0!important;' +
                     'width:' + w + 'px!important;height:' + h + 'px!important;' +
                     'display:flex!important;align-items:center!important;justify-content:center!important;' +
-                    'background:${bg}!important;touch-action:none!important;' +
+                    'background:$bg!important;touch-action:none!important;' +
                     'overflow:hidden!important;';
 
                 function notifyReady() {
@@ -663,11 +673,11 @@ private class ReaderAndroidWebView(
                     wrapper.style.setProperty('line-height', '${readerSettings.lineHeight}', 'important');
                     wrapper.style.setProperty('letter-spacing', '${readerSettings.characterSpacing}em', 'important');
                 }
-                
+
                 // Text alignment
                 var justify = ${if (readerSettings.justifyText) "true" else "false"};
                 wrapper.style.setProperty('text-align', justify ? 'justify' : 'left', 'important');
-                
+
                 // Avoid page break inside elements
                 var avoidBreak = ${if (readerSettings.avoidPageBreak) "true" else "false"};
                 if (avoidBreak) {
@@ -675,7 +685,7 @@ private class ReaderAndroidWebView(
                     abStyle.textContent = 'img, svg, figure, table, tr, td, th { break-inside: avoid !important; -webkit-column-break-inside: avoid !important; page-break-inside: avoid !important; }';
                     document.head.appendChild(abStyle);
                 }
-                
+
                 // Add @font-face for custom fonts before setting font-family
                 var fontUrl = '${readerSettings.fontUrl}';
                 console.log('[hoshi] Font loading - url: ' + fontUrl + ', font: ${readerSettings.selectedFont}');
@@ -684,7 +694,7 @@ private class ReaderAndroidWebView(
                     fontFace.textContent = "@font-face { font-family: 'HoshiCustomFont'; src: url('" + fontUrl + "'); }";
                     document.head.appendChild(fontFace);
                     console.log('[hoshi] Font-face rule added');
-                    
+
                     document.fonts.ready.then(function() {
                         wrapper.style.setProperty('font-family', 'HoshiCustomFont', 'important');
                     });
@@ -694,15 +704,15 @@ private class ReaderAndroidWebView(
                     else if (fontFamily === 'System Sans-Serif') fontFamily = 'sans-serif';
                     wrapper.style.setProperty('font-family', fontFamily, 'important');
                 }
-                
+
                 // Theme colors - preset themes override custom colors
                 var bg, tc;
-                if ('${readerSettings.theme}' === 'dark') { 
-                    bg = '#1a1a1a'; tc = '#ffffff'; 
-                } else if ('${readerSettings.theme}' === 'sepia') { 
-                    bg = '#f4ecd8'; tc = '#5b4636'; 
-                } else if ('${readerSettings.theme}' === 'light') { 
-                    bg = '#ffffff'; tc = '#000000'; 
+                if ('${readerSettings.theme}' === 'dark') {
+                    bg = '#1a1a1a'; tc = '#ffffff';
+                } else if ('${readerSettings.theme}' === 'sepia') {
+                    bg = '#f4ecd8'; tc = '#5b4636';
+                } else if ('${readerSettings.theme}' === 'light') {
+                    bg = '#ffffff'; tc = '#000000';
                 } else {
                     // System or custom - use custom colors
                     bg = '#${String.format("%06X", 0xFFFFFF and readerSettings.backgroundColor)}';
@@ -711,7 +721,7 @@ private class ReaderAndroidWebView(
                 b.style.setProperty('background-color', bg, 'important');
                 wrapper.style.setProperty('color', tc, 'important');
                 document.documentElement.style.setProperty('background-color', bg, 'important');
-                
+
                 // Furigana hiding
                 var hideFurigana = ${if (readerSettings.hideFurigana) "true" else "false"};
                 if (hideFurigana) {
@@ -720,7 +730,7 @@ private class ReaderAndroidWebView(
                     fStyle.textContent = 'rt { display: none !important; }';
                     document.head.appendChild(fStyle);
                 }
-                
+
                 // Continuous mode: free scroll based on writing mode
                 var vw = ${if (readerSettings.verticalWriting) "true" else "false"};
                 if (vw) {
@@ -737,14 +747,14 @@ private class ReaderAndroidWebView(
                 b.style.setProperty('box-sizing', 'border-box', 'important');
                 b.style.setProperty('width', iw + 'px', 'important');
                 b.style.setProperty('min-height', ih + 'px', 'important');
-                
+
                 document.documentElement.style.setProperty('height', '100%', 'important');
 
                 window.hoshiReader.registerCopyText();
                 window.hoshiReader.continuousMode = true;
                 window.hoshiReader.restoreProgress($pendingProgress);
             })();
-            """.trimIndent()
+        """.trimIndent()
     }
 
     private fun buildPagedScript(css: String): String {
@@ -790,7 +800,16 @@ private class ReaderAndroidWebView(
 
                 var hPad = Math.round(iw * ${readerSettings.horizontalPadding} / 100);
                 var vPad = Math.round(ih * ${readerSettings.verticalPadding} / 100);
+
+                // Use box-decoration-break: clone to make padding apply to every page (column)
+                // without touching the body (multicol container) dimensions.
                 wrapper.style.setProperty('padding', vPad + 'px ' + hPad + 'px', 'important');
+                wrapper.style.setProperty('-webkit-box-decoration-break', 'clone', 'important');
+                wrapper.style.setProperty('box-decoration-break', 'clone', 'important');
+
+                // Ensure body has no padding to avoid pagination drift
+                b.style.setProperty('padding', '0', 'important');
+
                 wrapper.style.setProperty('font-size', '${readerSettings.fontSize}px', 'important');
 
                 // Advanced layout settings
@@ -803,7 +822,7 @@ private class ReaderAndroidWebView(
                 // Text alignment
                 var justify = ${if (readerSettings.justifyText) "true" else "false"};
                 wrapper.style.setProperty('text-align', justify ? 'justify' : 'left', 'important');
-                
+
                 // Avoid page break inside elements
                 var avoidBreak = ${if (readerSettings.avoidPageBreak) "true" else "false"};
                 if (avoidBreak) {
@@ -811,7 +830,7 @@ private class ReaderAndroidWebView(
                     abStyle.textContent = 'img, svg, figure, table, tr, td, th { break-inside: avoid !important; -webkit-column-break-inside: avoid !important; page-break-inside: avoid !important; }';
                     document.head.appendChild(abStyle);
                 }
-                
+
                 // Furigana hiding
                 var hideFurigana = ${if (readerSettings.hideFurigana) "true" else "false"};
                 if (hideFurigana) {
@@ -820,6 +839,20 @@ private class ReaderAndroidWebView(
                     fStyle.textContent = 'rt { display: none !important; }';
                     document.head.appendChild(fStyle);
                 }
+
+                // Override problematic book CSS: hard-coded margins/paddings that interfere with layout.
+                var overrideStyle = document.getElementById('hoshi-override-style');
+                if (!overrideStyle) {
+                    overrideStyle = document.createElement('style');
+                    overrideStyle.id = 'hoshi-override-style';
+                    document.head.appendChild(overrideStyle);
+                }
+                overrideStyle.textContent = [
+                    '[class*="pt"] { margin-top: 0 !important; }',
+                    '[class*="pb"] { margin-bottom: 0 !important; }',
+                    'span.img.fpage, span.img.fblk { padding-bottom: 0 !important; }',
+                    '@page { margin: 0 !important; }'
+                ].join(' ');
 
                 var fontUrl = '${readerSettings.fontUrl}';
                 if (fontUrl && fontUrl.length > 0) {
@@ -870,7 +903,6 @@ private class ReaderAndroidWebView(
         """.trimIndent()
     }
 
-
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Handle tap logic first, before gesture detector
         when (event.actionMasked) {
@@ -893,7 +925,7 @@ private class ReaderAndroidWebView(
                 performClick()
             }
         }
-        
+
         val gestureHandled = gestureDetector.onTouchEvent(event)
         val webViewHandled = super.onTouchEvent(event)
         return gestureHandled || webViewHandled
@@ -916,8 +948,11 @@ private class ReaderAndroidWebView(
                 true
             }
             continuousMode -> navigateContinuous(forward)
-            else -> if (forward) navigate("forward", onNextChapter)
-                     else navigate("backward", onPreviousChapter)
+            else -> if (forward) {
+                navigate("forward", onNextChapter)
+            } else {
+                navigate("backward", onPreviousChapter)
+            }
         }
     }
 
@@ -973,16 +1008,16 @@ private class ReaderAndroidWebView(
         evaluateJavascript(script) { result ->
             if (result?.trim('"') == "scrolled") {
                 evaluateJavascript(
-                    "(function() { return window.hoshiReader.calculateProgress(); })()"
+                    "(function() { return window.hoshiReader.calculateProgress(); })()",
                 ) { progressResult ->
                     progressResult
                         ?.trim()
                         ?.trim('"')
                         ?.toDoubleOrNull()
                         ?.let {
-                        pendingProgress = it
-                        onProgressChanged(it)
-                    }
+                            pendingProgress = it
+                            onProgressChanged(it)
+                        }
                 }
             } else {
                 val chapterChanged = fallback()

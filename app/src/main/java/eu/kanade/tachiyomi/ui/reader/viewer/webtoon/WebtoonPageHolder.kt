@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.viewer.OcrCoordinateMapper
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -299,10 +300,61 @@ class WebtoonPageHolder(
         val targetPage = page ?: return
         ocrLoadJob?.cancel()
         ocrLoadJob = scope.launch {
-            logcat { "OCR request start (webtoon): chapter=${targetPage.chapter.chapter.id} page=${targetPage.index}" }
-            val blocks = viewer.activity.viewModel.getOcrBlocks(targetPage)
-            frame.setOcrBlocks(blocks)
+            loadOcrWithTransform(targetPage)
         }
+    }
+
+    private suspend fun loadOcrWithTransform(targetPage: ReaderPage) {
+        val viewModel = viewer.activity.viewModel
+        val dualSplitEnabled = viewer.config.dualPageSplit
+        val cropBordersEnabled = (viewer.config.imageCropBorders && viewer.isContinuous) ||
+            (viewer.config.continuousCropBorders && !viewer.isContinuous)
+
+        logcat { "OCR request start (webtoon): chapter=${targetPage.chapter.chapter.id} page=${targetPage.index}" }
+        var blocks = viewModel.getOcrBlocks(targetPage)
+
+        if (blocks.isEmpty()) {
+            frame.setOcrBlocks(blocks)
+            return
+        }
+
+        // ── Case 1: Split and Merge (Webtoon special) ───────────────────────────────
+        if (dualSplitEnabled && !viewer.config.dualPageRotateToFit) {
+            val streamFn = targetPage.stream
+            if (streamFn != null) {
+                val isWide = withIOContext {
+                    streamFn().use { ImageUtil.isWideImage(okio.Buffer().readFrom(it)) }
+                }
+                if (isWide) {
+                    val upperSide = if (viewer.config.dualPageInvert) ImageUtil.Side.LEFT else ImageUtil.Side.RIGHT
+                    blocks = OcrCoordinateMapper.mapToSplitAndMerge(
+                        blocks = blocks,
+                        upperIsRight = upperSide == ImageUtil.Side.RIGHT,
+                    )
+                    logcat { "OCR splitAndMerge (upperIsRight=${upperSide == ImageUtil.Side.RIGHT}): ${blocks.size} blocks after remap" }
+                }
+            }
+        }
+
+        // ── Case 2: Crop borders ────────────────────────────────────────────────────
+        if (cropBordersEnabled && blocks.isNotEmpty()) {
+            val streamFn = targetPage.stream
+            if (streamFn != null) {
+                blocks = withIOContext {
+                    try {
+                        streamFn().use { stream ->
+                            OcrCoordinateMapper.mapToCropped(blocks, okio.Buffer().readFrom(stream))
+                        }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e) { "OCR crop detection failed (webtoon), using raw blocks" }
+                        blocks
+                    }
+                }
+                logcat { "OCR crop-remap done (webtoon): ${blocks.size} blocks" }
+            }
+        }
+
+        frame.setOcrBlocks(blocks)
     }
 
     /**

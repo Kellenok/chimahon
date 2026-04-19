@@ -559,6 +559,16 @@
     return isCJK(ch) || /[\w\u00C0-\u024F\u0600-\u06FF]/.test(ch);
   }
 
+  const scanDelimiters = '。、！？…‥「」『』（）()【】〈〉《》〔〕｛｝{}［］[]・：；:;，,.─\n\r';
+  function isScanBoundary(ch) {
+    return /^[\s\u3000]$/.test(ch) || scanDelimiters.indexOf(ch) !== -1;
+  }
+
+  function isFurigana(node) {
+    const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    return !!(el && el.closest('rt, rp'));
+  }
+
   /**
    * Returns up to MAX_SCAN_CHARS of text starting at the tapped position.
    * For CJK the full forward slice is useful (backend handles deinflection).
@@ -585,18 +595,44 @@
     if (offset >= text.length) return null;
 
     const ch = text[offset];
-    if (!isWordChar(ch)) return null;
+    if (!isWordChar(ch) || isScanBoundary(ch) || isFurigana(node)) return null;
 
     if (isCJK(ch)) {
-      // Return forward slice — backend will find the longest matching term
-      return text.slice(offset, offset + MAX_SCAN_CHARS);
+      // Collect forward text across nodes, skipping furigana (<rt>)
+      const container = node.parentElement.closest('.entry-body, .headword, .gloss-content') || document.body;
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) => isFurigana(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+      });
+
+      walker.currentNode = node;
+      let result = '';
+      let currNode = node;
+      let currOffset = offset;
+
+      while (currNode && result.length < MAX_SCAN_CHARS) {
+        const content = currNode.textContent || '';
+        const slice = content.slice(currOffset);
+
+        for (let i = 0; i < slice.length && result.length < MAX_SCAN_CHARS; i++) {
+          const char = slice[i];
+          if (isScanBoundary(char)) {
+            return result.length > 0 ? result : null;
+          }
+          result += char;
+        }
+
+        if (result.length >= MAX_SCAN_CHARS) break;
+        currNode = walker.nextNode();
+        currOffset = 0;
+      }
+      return result.length > 0 ? result : null;
     }
 
     // Space-separated: expand to word boundaries
     let start = offset;
     let end = offset;
-    while (start > 0 && isWordChar(text[start - 1])) start--;
-    while (end < text.length && isWordChar(text[end])) end++;
+    while (start > 0 && isWordChar(text[start - 1]) && !isScanBoundary(text[start - 1])) start--;
+    while (end < text.length && isWordChar(text[end]) && !isScanBoundary(text[end])) end++;
     const word = text.slice(start, end).trim();
     return word.length > 0 ? word : null;
   }
@@ -1581,7 +1617,7 @@
       // Check if expression is already in Anki (from payload)
       const isAlreadyAdded = existingSet.includes(expression);
       ankiBtn.className = isAlreadyAdded ? 'anki-add-btn anki-added' : 'anki-add-btn';
-      ankiBtn.textContent = '+';
+      ankiBtn.textContent = isAlreadyAdded ? '✓' : '+';
       ankiBtn.title = isAlreadyAdded ? 'Already in Anki' : 'Add to Anki';
       ankiBtn.setAttribute('data-index', String(result.index || 0));
       ankiBtn.setAttribute('data-expression', expression);
