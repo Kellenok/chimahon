@@ -67,6 +67,8 @@ object Marker {
     const val AUDIO = "audio"
     const val SCREENSHOT = "screenshot"
     const val SEARCH_QUERY = "search-query"
+    const val URL = "url"
+    const val DOCUMENT_TITLE = "document-title"
     const val MANGA = "manga"
     const val CHAPTER = "chapter"
     const val MEDIA = "media"
@@ -87,6 +89,7 @@ object Marker {
         MANGA, CHAPTER, MEDIA,
         SINGLE_GLOSSARY,
         SCREENSHOT, SEARCH_QUERY,
+        URL, DOCUMENT_TITLE,
     )
 
     val ALL_WITH_TODO: List<String> = ALL + listOf(AUDIO)
@@ -302,7 +305,8 @@ object AnkiCardCreator {
     }
 
     private fun normalizeFieldValue(raw: String): String {
-        if (raw.contains('{')) return raw
+        // If it looks like a template already (contains markers or HTML), preserve it.
+        if (raw.contains("{") || raw.contains("<") || raw.contains(">")) return raw
 
         val legacyMap = mapOf(
             "TARGET_WORD" to Marker.EXPRESSION,
@@ -314,11 +318,14 @@ object AnkiCardCreator {
             "PITCH_ACCENT" to Marker.PITCH_ACCENTS,
             "NONE" to "",
         )
-        val parts = raw.split(",").mapNotNull { part ->
-            val marker = legacyMap[part.trim()]
-            if (marker.isNullOrBlank()) null else "{$marker}"
+        val parts = raw.split(",")
+        if (parts.all { it.trim() in legacyMap }) {
+            return parts.mapNotNull { part ->
+                val marker = legacyMap[part.trim()]
+                if (marker.isNullOrBlank()) null else "{$marker}"
+            }.joinToString("<br>")
         }
-        return parts.joinToString("<br>")
+        return raw
     }
 
     // =============================================================================
@@ -339,8 +346,7 @@ object AnkiCardCreator {
 
     private fun formatField(template: String, result: LookupResult, cloze: Cloze?, media: MediaInfo?, screenshotFilename: String?): String {
         if (template.isBlank()) return ""
-        val spacedTemplate = template.replace("}{", "} {")
-        return MARKER_PATTERN.replace(spacedTemplate) { match ->
+        return MARKER_PATTERN.replace(template) { match ->
             renderMarker(match.groupValues[1], result, cloze, media, screenshotFilename)
         }
     }
@@ -399,8 +405,8 @@ object AnkiCardCreator {
     // =============================================================================
 
     fun renderMarker(marker: String, result: LookupResult, cloze: Cloze? = null, media: MediaInfo? = null, screenshotFilename: String? = null): String = when (marker) {
-        Marker.EXPRESSION -> result.term.expression
-        Marker.READING -> result.term.reading
+        Marker.EXPRESSION -> escapeHtml(result.term.expression)
+        Marker.READING -> escapeHtml(result.term.reading)
         Marker.FURIGANA -> buildFuriganaHtml(result.term.expression, result.term.reading)
         Marker.FURIGANA_PLAIN -> buildFuriganaPlain(result.term.expression, result.term.reading)
         Marker.GLOSSARY -> buildGlossary(result.term.glossaries, brief = false, noDictTag = false, firstOnly = false)
@@ -429,16 +435,16 @@ object AnkiCardCreator {
             firstOnly = true,
         )
         Marker.GLOSSARY_PLAIN -> buildGlossaryPlain(result.term.glossaries, noDictTag = false)
-        Marker.SENTENCE -> cloze?.sentence ?: ""
-        Marker.CLOZE_PREFIX -> cloze?.prefix ?: ""
-        Marker.CLOZE_BODY -> cloze?.body ?: ""
-        Marker.CLOZE_BODY_KANA -> cloze?.bodyKana ?: ""
-        Marker.CLOZE_SUFFIX -> cloze?.suffix ?: ""
+        Marker.SENTENCE -> cloze?.let { escapeHtml(it.sentence) } ?: ""
+        Marker.CLOZE_PREFIX -> cloze?.let { escapeHtml(it.prefix) } ?: ""
+        Marker.CLOZE_BODY -> cloze?.let { escapeHtml(it.body) } ?: ""
+        Marker.CLOZE_BODY_KANA -> cloze?.let { escapeHtml(it.bodyKana) } ?: ""
+        Marker.CLOZE_SUFFIX -> cloze?.let { escapeHtml(it.suffix) } ?: ""
         Marker.TAGS -> buildTags(result)
         Marker.PART_OF_SPEECH -> buildPartOfSpeech(result)
         Marker.CONJUGATION -> buildConjugation(result)
-        Marker.DICTIONARY -> result.term.glossaries.firstOrNull()?.dictName ?: ""
-        Marker.DICTIONARY_ALIAS -> result.term.glossaries.firstOrNull()?.dictName ?: ""
+        Marker.DICTIONARY -> result.term.glossaries.firstOrNull()?.let { escapeHtml(it.dictName) } ?: ""
+        Marker.DICTIONARY_ALIAS -> result.term.glossaries.firstOrNull()?.let { escapeHtml(it.dictName) } ?: ""
         Marker.FREQUENCIES -> buildFrequenciesList(result)
         Marker.FREQUENCY_HARMONIC_RANK -> buildFrequencyHarmonicRank(result)
         Marker.FREQUENCY_AVERAGE_RANK -> buildFrequencyAverageRank(result)
@@ -449,7 +455,9 @@ object AnkiCardCreator {
         Marker.MORAE -> buildMorae(result.term.reading)
         Marker.PITCH_ACCENT_GRAPHS -> buildPitchAccentGraphs(result.term.reading, result.term.pitches)
         Marker.SCREENSHOT -> screenshotFilename?.let { "<img src=\"$it\">" } ?: ""
-        Marker.SEARCH_QUERY -> result.term.expression
+        Marker.SEARCH_QUERY -> escapeHtml(result.term.expression)
+        Marker.URL -> "" // TODO: Add to LookupResult
+        Marker.DOCUMENT_TITLE -> "" // TODO: Add to LookupResult
         Marker.MANGA -> media?.mangaTitle?.let { escapeHtml(it) } ?: ""
         Marker.CHAPTER -> media?.chapterName?.let { escapeHtml(it) } ?: ""
         Marker.MEDIA -> {
@@ -860,7 +868,7 @@ object AnkiCardCreator {
             g.definitionTags.split(" ").filter { it.isNotBlank() }.forEach { seen.add(it) }
             g.termTags.split(" ").filter { it.isNotBlank() }.forEach { seen.add(it) }
         }
-        return seen.joinToString(", ")
+        return if (seen.isEmpty()) "Unknown" else seen.joinToString(", ") { escapeHtml(it) }
     }
 
     private val POS_PRETTY = mapOf(
@@ -882,13 +890,15 @@ object AnkiCardCreator {
     )
 
     private fun buildPartOfSpeech(result: LookupResult): String {
-        return ""
+        // wordClasses is not yet in TermResult, but we can extract from tags if needed
+        // For now, return "Unknown" to be safe and consistent with Yomitan
+        return "Unknown"
     }
 
     private fun buildConjugation(result: LookupResult): String {
         val rules = result.term.rules
         if (rules.isNullOrEmpty()) return ""
-        return rules
+        return rules.split(" « ").joinToString(" « ") { escapeHtml(it) }
     }
 
     // =============================================================================
