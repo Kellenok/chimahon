@@ -4,6 +4,20 @@ All notable changes to Chimahon are documented here.
 
 The format follows a Keep a Changelog style and uses Semantic Versioning.
 
+## [v1.4.1]
+
+### Added
+- Coordinate remapping for OCR blocks in Reader crop and double-page modes.
+
+### Changed
+- Improved flexibility and robustness of markers in Anki card templates.
+
+### Fixed
+- Horizontal pagination and margin calculation in Novel Reader.
+- Novel Reader crash on release builds for specific books.
+- Anki duplicate check reliability and model mismatch handling.
+- Furigana stripping during recursive dictionary lookups.
+
 ## [v1.4.0]
 
 ### Added
