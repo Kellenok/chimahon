@@ -100,7 +100,6 @@ object Marker {
         SINGLE_GLOSSARY,
         SCREENSHOT, SEARCH_QUERY,
         URL, DOCUMENT_TITLE,
-        SENTENCE_FURIGANA, SENTENCE_FURIGANA_PLAIN,
     )
 
     val ALL_WITH_TODO: List<String> = ALL + listOf(AUDIO)
@@ -448,7 +447,6 @@ object AnkiCardCreator {
         )
         Marker.GLOSSARY_PLAIN -> buildGlossaryPlain(result.term.glossaries, noDictTag = false)
         Marker.SENTENCE -> cloze?.let { escapeHtml(it.sentence) } ?: ""
-        Marker.SENTENCE_BOLD -> cloze?.let { "${escapeHtml(it.prefix)}<b>${escapeHtml(it.body)}</b>${escapeHtml(it.suffix)}" } ?: ""
         Marker.CLOZE_PREFIX -> cloze?.let { escapeHtml(it.prefix) } ?: ""
         Marker.CLOZE_BODY -> cloze?.let { escapeHtml(it.body) } ?: ""
         Marker.CLOZE_BODY_KANA -> cloze?.let { escapeHtml(it.bodyKana) } ?: ""
@@ -473,13 +471,8 @@ object AnkiCardCreator {
         Marker.PITCH_ACCENT_GRAPHS -> buildPitchAccentGraphs(result.term.reading, result.term.pitches)
         Marker.SCREENSHOT -> screenshotFilename?.let { "<img src=\"$it\">" } ?: ""
         Marker.SEARCH_QUERY -> escapeHtml(result.term.expression)
-        Marker.URL -> ""
-        Marker.DOCUMENT_TITLE -> ""
-        Marker.SENTENCE_FURIGANA -> cloze?.let { "${escapeHtml(it.prefix)}${buildFuriganaHtml(it.body, it.bodyKana)}${escapeHtml(it.suffix)}" } ?: ""
-        Marker.SENTENCE_FURIGANA_PLAIN -> cloze?.let { "${it.prefix}${buildFuriganaPlain(it.body, it.bodyKana)}${it.suffix}" } ?: ""
-        Marker.SENTENCE_TRANSLATION -> ""
-        Marker.SELECTION_TEXT -> ""
-        Marker.MISC_INFO -> ""
+        Marker.URL -> "" // TODO: Add to LookupResult
+        Marker.DOCUMENT_TITLE -> "" // TODO: Add to LookupResult
         Marker.MANGA -> media?.mangaTitle?.let { escapeHtml(it) } ?: ""
         Marker.CHAPTER -> media?.chapterName?.let { escapeHtml(it) } ?: ""
         Marker.MEDIA -> {
