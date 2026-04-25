@@ -29,6 +29,7 @@ class GetApplicationRelease(
         val releases = service.releaseNotes(arguments)
             .filter {
                 !it.preRelease &&
+                    !it.draft &&
                     isNewVersion(
                         arguments.isPreview,
                         arguments.commitCount,

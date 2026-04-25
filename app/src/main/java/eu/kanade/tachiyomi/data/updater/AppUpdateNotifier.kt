@@ -164,6 +164,7 @@ internal class AppUpdateNotifier(private val context: Context) {
      * @param url web location of apk to download.
      */
     fun onDownloadError(
+        title: String,
         url: String,
         // KMK -->
         error: String? = null,
@@ -184,7 +185,7 @@ internal class AppUpdateNotifier(private val context: Context) {
             addAction(
                 R.drawable.ic_refresh_24dp,
                 context.stringResource(MR.strings.action_retry),
-                NotificationReceiver.downloadAppUpdatePendingBroadcast(context, url),
+                NotificationReceiver.downloadAppUpdatePendingBroadcast(context, url, title),
             )
             addAction(
                 R.drawable.ic_close_24dp,
