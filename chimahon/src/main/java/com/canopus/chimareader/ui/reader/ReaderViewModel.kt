@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.delay
+import logcat.LogPriority
+import logcat.logcat
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -175,7 +177,10 @@ class ReaderViewModel(
     var lastSavedExploredCharCount = 0 // Made internal for UI calculation
     var lastSavedSessionReadingTime = 0.0 // Made internal for UI calculation
     private var lastPeriodicSaveTime = System.currentTimeMillis()
+<<<<<<< HEAD
     private var lastSavedBookmarkFingerprint: Pair<Int, Long>? = null
+=======
+>>>>>>> char-counting-fix
 
     val todayCharactersRead: Int
         get() {
@@ -239,7 +244,10 @@ class ReaderViewModel(
         val bookmark = BookStorage.loadBookmark(rootUrl)
         index = bookmark?.chapterIndex ?: 0
         currentProgress = bookmark?.progress ?: 0.0
+<<<<<<< HEAD
         lastSavedBookmarkFingerprint = bookmarkFingerprint(index, currentProgress)
+=======
+>>>>>>> char-counting-fix
         
         totalExploredCharCount = calculateExploredCharCount(currentProgress)
         initialCharCount = totalExploredCharCount
@@ -248,6 +256,22 @@ class ReaderViewModel(
         val stats = BookStorage.loadStatistics(rootUrl)
         if (stats != null) {
             fullStatistics.addAll(stats)
+<<<<<<< HEAD
+=======
+            
+            // Migration: Heuristic to detect milliseconds stored as seconds
+            // If speed is extremely low (< 500 chars/h) and time is not zero, it's likely MS.
+            // e.g. 1715 chars in 33070 seconds (~9h) = 186 chars/h (MS speed would be 186k char/h)
+            val migrated = fullStatistics.map { 
+                val speed = if (it.readingTime > 0) (it.charactersRead / it.readingTime * 3600) else 10000.0
+                if (speed < 500.0 && it.readingTime > 0) {
+                    logcat(LogPriority.INFO) { "TTSU-STATS: Migrating entry '${it.dateKey}' from MS to Seconds (Speed: $speed)" }
+                    it.copy(readingTime = it.readingTime / 1000.0)
+                } else it
+            }
+            fullStatistics.clear()
+            fullStatistics.addAll(migrated)
+>>>>>>> char-counting-fix
         }
 
         // Timer for readingTime
@@ -424,7 +448,10 @@ class ReaderViewModel(
 
         persistBookmark(progress)
         savePersistentStatistics()
+<<<<<<< HEAD
         lastSavedBookmarkFingerprint = bookmarkFingerprint
+=======
+>>>>>>> char-counting-fix
     }
 
     fun nextChapter(): Boolean {
@@ -483,10 +510,13 @@ class ReaderViewModel(
         )
     }
 
+<<<<<<< HEAD
     private fun bookmarkFingerprint(index: Int, progress: Double): Pair<Int, Long> {
         return index to progress.toBits()
     }
 
+=======
+>>>>>>> char-counting-fix
     private fun savePersistentStatistics() {
         val dateKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         
@@ -520,6 +550,10 @@ class ReaderViewModel(
         
         // Persistence
         BookStorage.saveStatistics(fullStatistics.toList(), rootUrl)
+<<<<<<< HEAD
+=======
+        logcat(LogPriority.DEBUG) { "Saved statistics locally. Chars read today: ${dailyStats.charactersRead}" }
+>>>>>>> char-counting-fix
         
         lastSavedExploredCharCount = totalExploredCharCount
         lastSavedSessionReadingTime = sessionReadingTime

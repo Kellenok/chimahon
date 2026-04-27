@@ -36,6 +36,8 @@ fun ReaderScreen(
     book: BookMetadata,
     onBack: () -> Unit,
     onLookupRequested: (String, String, Float, Float) -> Unit = { _, _, _, _ -> },
+    onDisposeReader: (String, Double, Int, Long, List<Statistics>) -> Unit = { _, _, _, _, _ -> },
+    onPeriodicSync: (String, Double, Int, Long, List<Statistics>) -> Unit = { _, _, _, _, _ -> },
     isPopupActive: Boolean = false,
     onViewModelReady: (ReaderViewModel?) -> Unit = {},
     additionalSettings: @Composable ColumnScope.() -> Unit = {}
@@ -90,10 +92,27 @@ fun ReaderScreen(
         }
     }
 
+<<<<<<< HEAD
     val currentSettings = if (loadState is ReaderLoadState.Ready) {
         val vm = (loadState as ReaderLoadState.Ready).viewModel
         LaunchedEffect(vm) {
             onViewModelReady(vm)
+=======
+    // Periodic sync back to cloud (e.g. every 10 minutes)
+    LaunchedEffect(loadState) {
+        val readyState = loadState as? ReaderLoadState.Ready ?: return@LaunchedEffect
+        val vm = readyState.viewModel
+        while (true) {
+            kotlinx.coroutines.delay(10 * 60 * 1000)
+            val title = book.title ?: book.id
+            onPeriodicSync(
+                title,
+                vm.currentProgress,
+                vm.totalExploredCharCount,
+                System.currentTimeMillis(),
+                vm.fullStatistics.toList()
+            )
+>>>>>>> char-counting-fix
         }
         vm.getReaderSettings(context)
     } else {
@@ -129,6 +148,7 @@ fun ReaderScreen(
                     }
                 }
         }
+<<<<<<< HEAD
         
         ReaderThemedArea(currentSettings) {
             when (val state = loadState) {
@@ -195,6 +215,122 @@ fun ReaderScreen(
                         tapZonePx = tapZonePx,
                         isPopupActive = isPopupActive,
                         onTextSelected = { word, sentence, x, y -> onLookupRequested(word, sentence, x, y) },
+=======
+        when (val state = loadState) {
+            ReaderLoadState.Loading -> ReaderMessage("Opening...", loading = true)
+            is ReaderLoadState.Error -> ReaderMessage(state.message)
+            is ReaderLoadState.Ready -> {
+                val viewModel = state.viewModel
+                
+                val view = LocalView.current
+                DisposableEffect(viewModel.keepScreenOn) {
+                    view.keepScreenOn = viewModel.keepScreenOn
+                    onDispose {
+                        view.keepScreenOn = false
+                    }
+                }
+
+                // Initialize SasayakiPlayer if not already
+                if (viewModel.sasayakiPlayer == null) {
+                    val rootDir = viewModel.rootUrl
+                    viewModel.sasayakiPlayer = SasayakiPlayer(
+                        context = context,
+                        rootDir = rootDir,
+                        bridge = viewModel.bridge,
+                        loadChapter = { chapterIndex -> 
+                            viewModel.jumpToChapter(chapterIndex)
+                        },
+                        getCurrentIndex = { viewModel.index }
+                    )
+                }
+                
+                DisposableEffect(Unit) {
+                    onDispose {
+                        viewModel.saveBookmark(viewModel.currentProgress)
+                        onDisposeReader(
+                            viewModel.document.title ?: "Unknown",
+                            viewModel.currentProgress,
+                            viewModel.totalExploredCharCount,
+                            System.currentTimeMillis(),
+                            viewModel.fullStatistics.toList()
+                        )
+                    }
+                }
+
+                // Function to handle manual sync
+                val performManualSync = {
+                    viewModel.saveBookmark(viewModel.currentProgress)
+                    onPeriodicSync(
+                        book.title ?: book.id,
+                        viewModel.currentProgress,
+                        viewModel.totalExploredCharCount,
+                        System.currentTimeMillis(),
+                        viewModel.fullStatistics.toList()
+                    )
+                }
+                
+                // HUD visibility state - toggled by edge taps
+                var showHud by remember { mutableStateOf(true) }
+
+                val density = LocalDensity.current
+                val tapZonePx = with(density) { 64.dp.toPx() }.toInt()
+
+                // Single WebView handles all chapters
+                ReaderWebView(
+                    modifier = Modifier.fillMaxWidth().then(heightModifier),
+                    bridge = viewModel.bridge,
+                    continuousMode = viewModel.continuousMode,
+                    isImageOnly = viewModel.isCurrentChapterImageOnly,
+                    readerSettings = viewModel.getReaderSettings(context),
+                    focusMode = focusMode,
+                    onNextChapter = {
+                        viewModel.sasayakiPlayer?.prepareTransition()
+                        viewModel.nextChapter()
+                    },
+                    onPreviousChapter = {
+                        viewModel.sasayakiPlayer?.prepareTransition()
+                        viewModel.previousChapter()
+                    },
+                    onProgressChanged = { viewModel.saveBookmark(it) },
+                    onLoadFailed = { },
+                    onTap = { if (focusMode) focusMode = false },
+                    onTapTop = { showHud = !showHud },
+                    onTapBottom = { showHud = !showHud },
+                    swipeThreshold = chapterSwipeDistance,
+                    tapZonePx = tapZonePx,
+                    isPopupActive = isPopupActive,
+                    onTextSelected = { word, sentence, x, y -> onLookupRequested?.invoke(word, sentence, x, y) },
+                )
+
+                // Top HUD - always visible when showHud is true
+                if (showHud) {
+                    ReaderTopBar(
+                        title = viewModel.document.title().orEmpty(),
+                        onBack = onBack,
+                        onToggleHud = { showHud = false },
+                        backgroundColor = viewModel.getReaderSettings(context).backgroundColor,
+                        contentColor = viewModel.getReaderSettings(context).textColor,
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+                }
+
+                // Bottom HUD - always visible when showHud is true
+                if (showHud) {
+                    val readerSettings = viewModel.getReaderSettings(context)
+                    ReaderBottomBar(
+                        focusMode = focusMode,
+                        progressText = "${(viewModel.currentProgress * 100).toInt()}%",
+                        backgroundColor = readerSettings.backgroundColor,
+                        contentColor = readerSettings.textColor,
+                        onToggleHud = { showHud = false },
+                        onToggleFocusMode = { focusMode = true },
+                        onOpenChapters = { activeSheet = ActiveSheet.Chapters },
+                        onOpenAppearance = { activeSheet = ActiveSheet.Appearance },
+                        onOpenStatistics = { activeSheet = ActiveSheet.Statistics },
+                        onOpenSasayaki = { activeSheet = ActiveSheet.Sasayaki },
+                        onManualSync = performManualSync,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+>>>>>>> char-counting-fix
                     )
 
                     // Top HUD - always visible when showHud is true
@@ -237,7 +373,11 @@ fun ReaderScreen(
             activeSheet?.let { sheet ->
                 ReaderThemedArea(viewModel.getReaderSettings(context)) {
                     when (sheet) {
+<<<<<<< HEAD
                         ActiveSheet.Appearance -> AppearanceSheet(viewModel, additionalSettings) { activeSheet = null }
+=======
+                        ActiveSheet.Appearance -> AppearanceSheet(viewModel) { activeSheet = null }
+>>>>>>> char-counting-fix
                         ActiveSheet.Chapters -> ChapterListSheet(viewModel) { activeSheet = null }
                         ActiveSheet.Statistics -> StatisticsSheet(viewModel) { activeSheet = null }
                         ActiveSheet.Sasayaki -> SasayakiSheet(viewModel) { activeSheet = null }
@@ -300,6 +440,7 @@ private fun ReaderBottomBar(
     onOpenAppearance: () -> Unit,
     onOpenStatistics: () -> Unit,
     onOpenSasayaki: () -> Unit,
+    onManualSync: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -342,6 +483,16 @@ private fun ReaderBottomBar(
                     tint = Color(contentColor)
                 )
             }
+<<<<<<< HEAD
+=======
+            IconButton(onClick = onManualSync) {
+                Icon(
+                    Icons.Default.Bookmark, 
+                    contentDescription = "Sync Progress",
+                    tint = Color(contentColor)
+                )
+            }
+>>>>>>> char-counting-fix
         }
     }
 }

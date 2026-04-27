@@ -1,8 +1,38 @@
 package com.canopus.chimareader.data.epub
 
-import android.util.Log
-import org.jsoup.Jsoup
 import java.io.File
+
+private fun decodeHtmlEntities(html: String): String {
+    var text = html
+    // Common numeric entities (&#039; &#39; etc) - handles &#39; as well
+    val numericRegex = Regex("&#([0-9]+);")
+    text = numericRegex.replace(text) { match ->
+        val code = match.groupValues[1].toIntOrNull()
+        if (code != null && code in 0..0x10FFFF) code.toInt().toChar().toString() else match.value
+    }
+    // Common named entities - chain all for efficiency
+    return text
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&mdash;", "—")
+        .replace("&ndash;", "–")
+        .replace("&hellip;", "…")
+        .replace("&lsquo;", "'")
+        .replace("&rsquo;", "'")
+        .replace("&ldquo;", """)
+        .replace("&rdquo;", """)
+        .replace("&middot;", "·")
+        .replace("&bull;", "•")
+        .replace("&deg;", "°")
+        .replace("&ensp;", " ")
+        .replace("&emsp;", " ")
+        .replace("&zwsp;", "")
+        .replace("&shy;", "")
+}
 
 data class EpubBook(
     val title: String? = null,
@@ -65,7 +95,7 @@ data class EpubBook(
     private val chapterLengthCache = mutableMapOf<Int, Int>()
 
     /**
-     * Calculates the exploredCharCount of a specific chapter matching TTSU logic
+     * Calculates the exploredCharCount of a specific chapter matching Hoshi-Reader logic
      */
     fun getChapterCharacters(index: Int): Int {
         if (chapterLengthCache.containsKey(index)) return chapterLengthCache[index]!!
@@ -81,16 +111,31 @@ data class EpubBook(
         if (!file.exists()) return 0
 
         return try {
-            val doc = Jsoup.parse(file, "UTF-8", "")
-            val text = doc.text()
-            
-            // TTSU Regex matching: Japanese/Chinese characters, digits and alphabet
-            // /[^\d\w○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚｦ-ﾝ\p{IsHan}]+/
-            val ttsuRegex = Regex("[^0-9a-zA-Z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚｦ-ﾝ\\p{IsHan}]")
-            val filteredText = text.replace(ttsuRegex, "")
-            
-            // In JS Array.from(s).length provides the codepoint count (surrogate pairs count as 1)
-            val charCount = filteredText.codePointCount(0, filteredText.length)
+            var html = file.readText()
+
+            // Extract body content only
+            val bodyRegex = Regex("(?s)<body[^>]*>(.*)</body>")
+            val bodyMatch = bodyRegex.find(html)
+            html = bodyMatch?.groupValues?.getOrNull(1) ?: html
+
+            // Remove rt tags (ruby reading)
+            html = html.replace(Regex("(?s)<rt>.*?</rt>"), "")
+
+            // Remove script and style tags with content
+            html = html.replace(Regex("(?s)<(script|style)[^>]*>.*?</\\1>"), "")
+
+            // Remove all HTML tags
+            html = html.replace(Regex("<[^>]+>"), "")
+
+            // Decode common HTML entities efficiently (single regex pass)
+            val text = decodeHtmlEntities(html)
+
+            // Filter to Japanese/Chinese characters, digits and alphabet (TTU method - uppercase only)
+            val hoshiRegex = Regex("[^0-9A-Z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚｦ-ﾝ\\p{Radical}\\p{Unified_Ideograph}]")
+            val filteredText = text.replace(hoshiRegex, "")
+
+            // Use Array.from equivalent (codepoints) like TTU
+            val charCount = filteredText.toList().size
             chapterLengthCache[index] = charCount
             charCount
         } catch(e: Exception) {
@@ -99,7 +144,7 @@ data class EpubBook(
     }
 
     /**
-     * Converts an absolute character count back into a 
+     * Converts an absolute character count (from TTSU) back into a 
      * specific chapter index and decimal progress (0.0 to 1.0) for that chapter.
      */
     fun convertCharsToProgress(totalExploredChars: Int): Pair<Int, Double> {
