@@ -1,6 +1,7 @@
 package com.canopus.chimareader.ui.reader
 
 import android.util.Log
+import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -212,22 +213,30 @@ fun ReaderScreen(
                         onTextSelected = { word, sentence, x, y -> onLookupRequested(word, sentence, x, y) },
                     )
 
-                    // Top HUD - always visible when showHud is true
-                    if (showHud) {
+                    // Top HUD
+                    AnimatedVisibility(
+                        visible = showHud,
+                        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    ) {
                         ReaderTopBar(
                             title = viewModel.document.title().orEmpty(),
                             onBack = onBack,
                             onToggleHud = { showHud = false },
                             backgroundColor = currentSettings.backgroundColor,
                             contentColor = currentSettings.textColor,
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .statusBarsPadding()
+                            modifier = Modifier.statusBarsPadding()
                         )
                     }
 
-                    // Bottom HUD - always visible when showHud is true
-                    if (showHud) {
+                    // Bottom HUD
+                    AnimatedVisibility(
+                        visible = showHud,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    ) {
                         ReaderBottomBar(
                             focusMode = focusMode,
                             progressText = "${(viewModel.currentProgress * 100).toInt()}%",
@@ -238,9 +247,7 @@ fun ReaderScreen(
                             onOpenChapters = { activeSheet = ActiveSheet.Chapters },
                             onOpenAppearance = { activeSheet = ActiveSheet.Appearance },
                             onOpenStatistics = { activeSheet = ActiveSheet.Statistics },
-                            onOpenSasayaki = { activeSheet = ActiveSheet.Sasayaki },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
+                            onOpenSasayaki = { activeSheet = ActiveSheet.Sasayaki }
                         )
                     }
                 }
