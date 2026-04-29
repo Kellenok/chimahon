@@ -713,6 +713,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
         // Immediately trigger dictionary popup at the tapped character position
         val ssiv = pageView as? SubsamplingScaleImageView ?: return true
         val charOffset = getCharOffset(block, viewX, viewY, ssiv) ?: 0
+        
+        if (wasActive == block && activeOcrCharOffset == charOffset) {
+            logcat { "OCR tap: same character tapped, dismissing popup" }
+            dismissActiveOcrBlock()
+            onDismissOcrPopup?.invoke()
+            return true // Consume the tap so it doesn't trigger pagination/HUD
+        }
+        
         activeOcrCharOffset = charOffset
         activeOcrMatchedCount = 0 // Reset until dictionary matches
         if (charOffset !in block.fullText.indices) {
