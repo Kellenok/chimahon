@@ -45,6 +45,8 @@ fun ReaderScreen(
     onViewModelReady: (ReaderViewModel?) -> Unit = {},
     additionalSettings: @Composable ColumnScope.() -> Unit = {},
     settingsNamespace: String? = null,
+    onDisposeReader: (String, Double, Int, Long, List<Statistics>) -> Unit = { _, _, _, _, _ -> },
+    onPeriodicSync: (String, Double, Int, Long, List<Statistics>) -> Unit = { _, _, _, _, _ -> },
 ) {
     val context = LocalContext.current
 
@@ -178,6 +180,27 @@ fun ReaderScreen(
                     DisposableEffect(Unit) {
                         onDispose {
                             viewModel.saveBookmark(viewModel.currentProgress)
+                            onDisposeReader(
+                                viewModel.document.title ?: "Unknown",
+                                viewModel.currentProgress,
+                                viewModel.totalExploredCharCount,
+                                System.currentTimeMillis(),
+                                viewModel.fullStatistics.toList()
+                            )
+                        }
+                    }
+
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            kotlinx.coroutines.delay(10 * 60 * 1000) // 10 minutes
+                            val title = book.title ?: book.id
+                            onPeriodicSync(
+                                title,
+                                viewModel.currentProgress,
+                                viewModel.totalExploredCharCount,
+                                System.currentTimeMillis(),
+                                viewModel.fullStatistics.toList()
+                            )
                         }
                     }
 

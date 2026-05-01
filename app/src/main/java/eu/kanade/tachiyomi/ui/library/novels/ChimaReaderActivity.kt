@@ -38,6 +38,14 @@ import kotlinx.coroutines.launch
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
+import eu.kanade.tachiyomi.data.sync.ttsu.TtsuSyncManager
+import com.canopus.chimareader.data.Statistics
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
+
 /**
  * App-side subclass of [NovelReaderActivity] that wires text-selection events
  * from the EPUB reader WebView into the [OcrLookupPopup] — no screenshot needed,
@@ -55,6 +63,7 @@ class ChimaReaderActivity : NovelReaderActivity() {
 
     private var cachedActiveProfile: chimahon.anki.AnkiProfile? = null
     private var cachedTermPaths: List<String>? = null
+    private var lookupDeferred: kotlinx.coroutines.Deferred<*>? = null
 
     private fun getOrRefreshLookupPaths(): Pair<chimahon.anki.AnkiProfile, List<String>> {
         val prefs = Injekt.get<DictionaryPreferences>()
@@ -183,8 +192,8 @@ class ChimaReaderActivity : NovelReaderActivity() {
         if (!readerPreferences.readWithVolumeKeys().get()) return super.onKeyDown(keyCode, event)
         
         when (keyCode) {
-            android.view.KeyEvent.KEYCODE_VOLUME_UP -> return true
-            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> return true
+            android.view.KeyEvent.KEYCODE_VOLUME_UP -> return handleVolumeKey(true)
+            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> return handleVolumeKey(false)
         }
         return super.onKeyDown(keyCode, event)
     }
@@ -232,6 +241,43 @@ class ChimaReaderActivity : NovelReaderActivity() {
         }
     }
 
+    /** Called by [NovelReaderActivity] when the reader is closed/disposed. */
+    override fun onReaderClosed(bookTitle: String, progress: Double, charsRead: Int, timestamp: Long, statistics: List<Statistics>) {
+        syncToGoogleDrive(bookTitle, progress, charsRead, timestamp, statistics)
+    }
+
+    /** Called by [NovelReaderActivity] periodically while reading. */
+    override fun onPeriodicSync(bookTitle: String, progress: Double, charsRead: Int, timestamp: Long, statistics: List<Statistics>) {
+        syncToGoogleDrive(bookTitle, progress, charsRead, timestamp, statistics)
+    }
+
+    private fun syncToGoogleDrive(bookTitle: String, progress: Double, charsRead: Int, timestamp: Long, statistics: List<Statistics>) {
+        val syncManager = TtsuSyncManager(this)
+        // Use GlobalScope + NonCancellable to ensure sync completes even if activity is destroyed
+        @Suppress("OPT_IN_USAGE")
+        GlobalScope.launch(Dispatchers.IO) {
+            withContext(NonCancellable) {
+                logcat(LogPriority.DEBUG, tag = "TTSU-SYNC") { "Starting sync for $bookTitle..." }
+                
+                val progressResult = syncManager.pushProgressToGoogleDrive(
+                    bookTitle = bookTitle,
+                    exploredCharCount = charsRead,
+                    progress = progress,
+                    lastModified = timestamp
+                )
+                logcat(LogPriority.DEBUG, tag = "TTSU-SYNC") { "Progress sync result: $progressResult" }
+
+                val statsResult = syncManager.pushStatisticsToGoogleDrive(
+                    bookTitle = bookTitle,
+                    statistics = statistics
+                )
+                logcat(LogPriority.DEBUG, tag = "TTSU-SYNC") { "Statistics sync result: $statsResult" }
+                
+                logcat(LogPriority.INFO, tag = "TTSU-SYNC") { "Finished sync for $bookTitle." }
+            }
+        }
+    }
+
     /**
      * Backing state for the lookup popup. Using Activity-level `mutableStateOf`
      * (not inside a composable) means it survives re-compositions correctly and
@@ -250,8 +296,6 @@ class ChimaReaderActivity : NovelReaderActivity() {
         val isVertical: Boolean,
         val activeProfile: chimahon.anki.AnkiProfile,
     )
-
-    private var lookupDeferred: kotlinx.coroutines.Deferred<chimahon.DictionaryRepository.LookupResult2>? = null
 
     /** Called by [NovelReaderActivity] whenever the user selects text in the WebView. */
     override fun onLookupRequested(word: String, sentence: String, x: Float, y: Float, w: Float, h: Float) {
@@ -273,7 +317,6 @@ class ChimaReaderActivity : NovelReaderActivity() {
     }
 
     override fun onDismissPopupRequested() {
-        super.onDismissPopupRequested()
         lookupState = null
         cancelActiveLookup()
         isPopupActive = false
@@ -295,8 +338,9 @@ class ChimaReaderActivity : NovelReaderActivity() {
 
         // Retain a single WebView + repository across re-compositions so the
         // current lookup result isn't destroyed on every keystroke / recompose.
-        val repo = remember { Injekt.get<DictionaryRepository>() }
-        val webView = remember { ensurePopupWebView() }
+        val externalFilesDir = getExternalFilesDir(null)
+        val repo = remember { DictionaryRepository(externalFilesDir) }
+        val webView = remember { WebView(this) }
 
         BackHandler {
             lookupState = null
@@ -332,8 +376,6 @@ class ChimaReaderActivity : NovelReaderActivity() {
                 mediaInfo = mediaInfo,
                 onRequestScreenshot = null,
                 onCropTriggered = null,
-                initialLookupDeferred = lookupDeferred,
-                usePopup = false,
                 onTermMatched = { charCount ->
                     readerViewModel?.bridge?.send(com.canopus.chimareader.ui.reader.WebViewCommand.HighlightSelection(charCount))
                 },

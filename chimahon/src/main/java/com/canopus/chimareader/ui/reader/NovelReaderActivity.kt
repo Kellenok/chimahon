@@ -16,6 +16,8 @@ import com.canopus.chimareader.data.NovelReaderSettings
 import androidx.core.graphics.ColorUtils
 import java.io.File
 
+import com.canopus.chimareader.data.Statistics
+
 open class NovelReaderActivity : ComponentActivity() {
 
     companion object {
@@ -90,6 +92,12 @@ open class NovelReaderActivity : ComponentActivity() {
         isPopupActive = false
     }
 
+    /** Override in subclass to handle reader closure / progress sync. */
+    protected open fun onReaderClosed(bookTitle: String, progress: Double, charsRead: Int, timestamp: Long, statistics: List<Statistics>) = Unit
+
+    /** Override in subclass to handle periodic progress sync. */
+    protected open fun onPeriodicSync(bookTitle: String, progress: Double, charsRead: Int, timestamp: Long, statistics: List<Statistics>) = Unit
+
     @Composable
     protected open fun PopupOverlay() {}
 
@@ -134,6 +142,12 @@ open class NovelReaderActivity : ComponentActivity() {
                 onLookupRequested = { word, sentence, x, y, w, h -> onLookupRequested(word, sentence, x, y, w, h) },
                 onSentenceReady = { sentence -> onSentenceReady(sentence) },
                 onDismissPopupRequested = { onDismissPopupRequested() },
+                onDisposeReader = { title, progress, charsRead, timestamp, stats ->
+                    onReaderClosed(title, progress, charsRead, timestamp, stats)
+                },
+                onPeriodicSync = { title, progress, charsRead, timestamp, stats ->
+                    onPeriodicSync(title, progress, charsRead, timestamp, stats)
+                },
                 isPopupActive = isPopupActive,
                 onViewModelReady = { readerViewModel = it },
                 additionalSettings = { AdditionalAppearanceSettings() },

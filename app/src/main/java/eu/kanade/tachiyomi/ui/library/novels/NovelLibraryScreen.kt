@@ -103,6 +103,7 @@ fun Screen.NovelLibraryScreen() {
     val state: NovelLibraryScreenModel.State by screenModel.state.collectAsState()
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     val epubPicker = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -141,6 +142,10 @@ fun Screen.NovelLibraryScreen() {
                 onClickRefresh = {
                     if (!SyncDataJob.isRunning(context)) {
                         SyncDataJob.startNow(context, manual = true)
+                        // Trigger TTSU sync as well
+                        scope.launch {
+                            eu.kanade.tachiyomi.data.sync.ttsu.TtsuSyncManager(context).pullAllProgress()
+                        }
                     } else {
                         context.toast(SYMR.strings.sync_in_progress)
                     }
