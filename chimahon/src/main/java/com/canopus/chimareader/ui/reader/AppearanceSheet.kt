@@ -110,6 +110,20 @@ fun AppearanceSheet(
                         Text("Sepia")
                     }
                 }
+                
+                if (viewModel.theme == Theme.SYSTEM) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text("System uses Sepia", style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = viewModel.systemLightSepia,
+                            onCheckedChange = { viewModel.updateSystemLightSepia(it) }
+                        )
+                    }
+                }
             }
 
             // Layout Mode
@@ -234,8 +248,8 @@ fun AppearanceSheet(
                     Slider(
                         value = viewModel.lineHeight.toFloat(),
                         onValueChange = { viewModel.updateLineHeight(it.toDouble()) },
-                        valueRange = 1.0f..1.8f,
-                        steps = 7
+                        valueRange = 1.0f..2.5f,
+                        steps = 14
                     )
                 }
 

@@ -56,10 +56,11 @@ fun ReaderScreen(
     val chapterSwipeDistance by settings.chapterSwipeDistance.collectAsState(initial = 96)
 
     val currentTheme by settings.theme.collectAsState(initial = com.canopus.chimareader.data.Theme.SYSTEM)
+    val systemLightSepia by settings.systemLightSepia.collectAsState(initial = false)
     val customBg by settings.customBackgroundColor.collectAsState(initial = 0xFFF2E2C9.toInt())
     val customTxt by settings.customTextColor.collectAsState(initial = 0xFF000000.toInt())
     
-    val initialSettings = remember(currentTheme, customBg, customTxt) {
+    val initialSettings = remember(currentTheme, systemLightSepia, customBg, customTxt) {
         val (bg, txt) = when (currentTheme) {
             com.canopus.chimareader.data.Theme.LIGHT -> 0xFFFFFFFF.toInt() to 0xFF000000.toInt()
             com.canopus.chimareader.data.Theme.DARK -> 0xFF121212.toInt() to 0xFFE0E0E0.toInt()
@@ -67,7 +68,13 @@ fun ReaderScreen(
             com.canopus.chimareader.data.Theme.CUSTOM -> customBg to customTxt
             com.canopus.chimareader.data.Theme.SYSTEM -> {
                 val isDark = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
-                if (isDark) 0xFF121212.toInt() to 0xFFE0E0E0.toInt() else 0xFFFFFFFF.toInt() to 0xFF000000.toInt()
+                if (isDark) {
+                    if (systemLightSepia) 0xFF1C140C.toInt() to 0xFFF2E2C9.toInt()
+                    else 0xFF121212.toInt() to 0xFFE0E0E0.toInt()
+                } else {
+                    if (systemLightSepia) 0xFFF2E2C9.toInt() to 0xFF3C2C1C.toInt()
+                    else 0xFFFFFFFF.toInt() to 0xFF000000.toInt()
+                }
             }
         }
         ReaderSettings(backgroundColor = bg, textColor = txt)

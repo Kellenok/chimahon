@@ -166,6 +166,7 @@ class ReaderViewModel(
     var layoutAdvanced by mutableStateOf(false)
     var tapZonePercent by mutableIntStateOf(20)
     var keepScreenOn by mutableStateOf(false)
+    var systemLightSepia by mutableStateOf(false)
 
     // Tracks statistics for current reading session
     var isTimerPaused by mutableStateOf(false)
@@ -243,6 +244,7 @@ class ReaderViewModel(
             hideFurigana = settings.readerHideFurigana.first()
             tapZonePercent = settings.chapterTapZones.first()
             keepScreenOn = settings.keepScreenOn.first()
+            systemLightSepia = settings.systemLightSepia.first()
         }
 
         val bookmark = BookStorage.loadBookmark(rootUrl)
@@ -355,6 +357,9 @@ class ReaderViewModel(
         scope.launch {
             settings.keepScreenOn.collect { keepScreenOn = it }
         }
+        scope.launch {
+            settings.systemLightSepia.collect { systemLightSepia = it }
+        }
     }
 
     fun updateTheme(value: Theme) = scope.launch { settings.setTheme(value) }
@@ -375,6 +380,7 @@ class ReaderViewModel(
     fun updateLayoutAdvanced(value: Boolean) = scope.launch { settings.setLayoutAdvanced(value) }
     fun updateTapZonePercent(value: Int) = scope.launch { settings.setChapterTapZones(value) }
     fun updateKeepScreenOn(value: Boolean) = scope.launch { settings.setKeepScreenOn(value) }
+    fun updateSystemLightSepia(value: Boolean) = scope.launch { settings.setSystemLightSepia(value) }
 
     fun getReaderSettings(context: Context): ReaderSettings {
         val fontUrl = if (FontManager.isCustomFont(context, selectedFont)) {
@@ -390,7 +396,13 @@ class ReaderViewModel(
             Theme.CUSTOM -> customBackgroundColor to customTextColor
             Theme.SYSTEM -> {
                 val isDark = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
-                if (isDark) 0xFF121212.toInt() to 0xFFE0E0E0.toInt() else 0xFFFFFFFF.toInt() to 0xFF000000.toInt()
+                if (isDark) {
+                    if (systemLightSepia) 0xFF1C140C.toInt() to 0xFFF2E2C9.toInt() // Inverted Sepia
+                    else 0xFF121212.toInt() to 0xFFE0E0E0.toInt()
+                } else {
+                    if (systemLightSepia) 0xFFF2E2C9.toInt() to 0xFF3C2C1C.toInt() // Sepia
+                    else 0xFFFFFFFF.toInt() to 0xFF000000.toInt()
+                }
             }
         }
 
