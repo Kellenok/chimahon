@@ -162,9 +162,13 @@ internal object OwOCRMerger {
         isRtl: Boolean,
         config: MergeConfig,
     ): ParagraphWithMeta {
-        // We don't strictly need to sort here because mergeOverlappingLines re-sorts,
-        // but we'll pass the input list.
-        val mergedFragments = mergeOverlappingLines(lines, isVertical)
+        val sorted = if (isVertical) {
+            lines.sortedByDescending { it.bbox.right }
+        } else {
+            lines.sortedBy { it.bbox.top }
+        }
+
+        val mergedFragments = mergeOverlappingLines(sorted, isVertical)
         val filtered = if (lines.none { it.paragraphId != null } && config.furiganaFilter) {
             furiganaFilter(mergedFragments, isVertical)
         } else {
@@ -172,7 +176,7 @@ internal object OwOCRMerger {
         }
 
         if (filtered.isEmpty()) {
-            return createParagraphFromLines(lines.take(1), isVertical, isRtl, config)
+            return createParagraphFromLines(sorted.take(1), isVertical, isRtl, config)
         }
 
         val left = filtered.minOf { it.bbox.left }
@@ -180,18 +184,8 @@ internal object OwOCRMerger {
         val top = filtered.minOf { it.bbox.top }
         val bottom = filtered.maxOf { it.bbox.bottom }
 
-        // Re-sort to reading order after merging fragments.
-        // Horizontal: top-to-bottom.
-        // Vertical: right-to-left.
-        // This directly fixes the Anki export sentence order.
-        val finalSorted = if (isVertical) {
-            filtered.sortedByDescending { it.bbox.right }
-        } else {
-            filtered.sortedBy { it.bbox.top }
-        }
-
         val textContent = buildString {
-            for ((idx, line) in finalSorted.withIndex()) {
+            for ((idx, line) in filtered.withIndex()) {
                 if (idx > 0) {
                     append('\n')
                 }
@@ -209,9 +203,9 @@ internal object OwOCRMerger {
         val paraObj = OcrResult(
             text = textContent,
             tightBoundingBox = BoundingBox(x = left, y = top, width = right - left, height = bottom - top),
-            isMerged = finalSorted.size > 1,
+            isMerged = filtered.size > 1,
             forcedOrientation = forcedOrientation,
-            constituentBoxes = finalSorted.map { it.bbox.toBoundingBox() },
+            constituentBoxes = filtered.map { it.bbox.toBoundingBox() },
         )
 
         val largestLineCharSize = if (isVertical) {
