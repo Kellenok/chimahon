@@ -5,6 +5,27 @@ All notable changes to Chimahon are documented here.
 The format follows a Keep a Changelog style and uses Semantic Versioning.
 
 
+## [v1.6.2]
+
+### Added
+- Custom font support for the dictionary popup.
+- Embedded scoped styles in Anki exports.
+- Paragraph spacing option to the Novel Reader.
+- System-themed sepia background setting for the Novel Reader.
+
+### Changed
+- Refined dictionary popup appearance better positioning and stable icons.
+- Revamped Anki marker dropdown UX.
+- Anki sentence exports now follow the natural OCR box reading order.
+- Expanded the available range for line height adjustments in the Novel Reader.
+- The "Shift Double Page" reader setting is now saved individually per manga.
+
+### Fixed
+- Fixed deinflection order.
+- Fix pitch accent export in Anki.
+- Resolved an issue causing incorrect page screenshots to be exported to Anki on double-page spreads.
+
+
 ## [v1.6.1]
 
 ### Added
