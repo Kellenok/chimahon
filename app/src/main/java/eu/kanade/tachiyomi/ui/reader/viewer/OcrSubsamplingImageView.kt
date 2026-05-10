@@ -418,7 +418,7 @@ class OcrSubsamplingImageView(
                 )
             }
 
-            canvas.drawText(ch.toString(), x, yCenter + baselineShift, textPaint)
+            drawVerticalChar(canvas, ch, x, yCenter, baselineShift, textPaint)
         }
     }
 
@@ -469,9 +469,45 @@ class OcrSubsamplingImageView(
                     )
                 }
 
-                canvas.drawText(ch.toString(), x, yCenter + baselineShift, textPaint)
+                drawVerticalChar(canvas, ch, x, yCenter, baselineShift, textPaint)
             }
             currentOffset += text.length
+        }
+    }
+
+    private fun drawVerticalChar(
+        canvas: Canvas,
+        ch: Char,
+        x: Float,
+        yCenter: Float,
+        baselineShift: Float,
+        paint: Paint,
+    ) {
+        val rotateChars = setOf('ー', '-', '—', '~', '〜', '…', '=')
+        if (ch in rotateChars) {
+            canvas.save()
+            canvas.rotate(90f, x, yCenter)
+            canvas.drawText(ch.toString(), x, yCenter + baselineShift, paint)
+            canvas.restore()
+        } else {
+            val str = when (ch) {
+                '「' -> "﹁"
+                '」' -> "﹂"
+                '『' -> "﹃"
+                '』' -> "﹄"
+                '（' -> "︵"
+                '）' -> "︶"
+                '[' -> "﹇"
+                ']' -> "﹈"
+                '【' -> "︻"
+                '】' -> "︼"
+                '《' -> "︽"
+                '》' -> "︾"
+                '〈' -> "︿"
+                '〉' -> "﹀"
+                else -> ch.toString()
+            }
+            canvas.drawText(str, x, yCenter + baselineShift, paint)
         }
     }
 
