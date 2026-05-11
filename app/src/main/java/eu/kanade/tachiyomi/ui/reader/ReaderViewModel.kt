@@ -1711,7 +1711,7 @@ class ReaderViewModel @JvmOverloads constructor(
             }
 
             val content = mokuroFile.openInputStream().use { it.bufferedReader().readText() }
-            val mokuro = chimahon.ocr.parseMokuro(content)
+            val mokuro = chimahon.ocr.Mokuro.parseMokuro(content)
                 ?: return@withLock null
 
             val data = MokuroChapterData(mokuro, imageFiles)
@@ -1725,13 +1725,13 @@ class ReaderViewModel @JvmOverloads constructor(
         chapterData: MokuroChapterData,
         pageIndex: Int,
     ): List<eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock>? {
-        val mokuroPage = chimahon.ocr.resolveMokuroPage(
+        val mokuroPage = chimahon.ocr.Mokuro.resolveMokuroPage(
             chapterData.mokuro,
             chapterData.imageFiles,
             pageIndex,
         ) ?: return null
 
-        return chimahon.ocr.convertMokuroBlocks(mokuroPage).map { block ->
+        return chimahon.ocr.Mokuro.convertMokuroBlocks(mokuroPage).map { block ->
             eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock(
                 xmin = block.xmin,
                 ymin = block.ymin,
@@ -1834,7 +1834,7 @@ class ReaderViewModel @JvmOverloads constructor(
                 response.body?.string() ?: return@runCatching null
             }
 
-            val mokuro = chimahon.ocr.parseMokuro(content)
+            val mokuro = chimahon.ocr.Mokuro.parseMokuro(content)
                 ?: run {
                     logcat(LogPriority.ERROR) { "Mokuro: failed to parse JSON" }
                     return@runCatching null
@@ -1844,10 +1844,10 @@ class ReaderViewModel @JvmOverloads constructor(
             val mokuroPage = if (imageFiles.isEmpty()) {
                 mokuro.pages.getOrNull(pageIndex)
             } else {
-                chimahon.ocr.resolveMokuroPage(mokuro, imageFiles, pageIndex)
+                chimahon.ocr.Mokuro.resolveMokuroPage(mokuro, imageFiles, pageIndex)
             } ?: return@runCatching null
 
-            chimahon.ocr.convertMokuroBlocks(mokuroPage).map { block ->
+            chimahon.ocr.Mokuro.convertMokuroBlocks(mokuroPage).map { block ->
                 eu.kanade.tachiyomi.ui.reader.viewer.OcrTextBlock(
                     xmin = block.xmin,
                     ymin = block.ymin,
