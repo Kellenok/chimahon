@@ -125,9 +125,6 @@ fun OcrLookupPopup(
     val styles = currentFrame?.styles ?: emptyList()
     val mediaDataUris = currentFrame?.mediaDataUris ?: emptyMap()
     val existingExpressions = currentFrame?.existingExpressions ?: emptySet()
-    val matchedCharCount = remember(results) {
-        results.firstOrNull()?.matched?.let { it.codePointCount(0, it.length) } ?: 0
-    }
     var contentReady by remember { mutableStateOf(false) }
     var hasRenderedContent by remember { mutableStateOf(false) }
     var lookupGeneration by remember { mutableIntStateOf(0) }
@@ -466,7 +463,7 @@ fun OcrLookupPopup(
 
     val layoutResult = remember(
         anchorX, anchorY, anchorWidth, anchorHeight,
-        screenWidthPx, screenHeightPx, popupWidthPx, popupHeightPx, isVertical, popupModePref, matchedCharCount,
+        screenWidthPx, screenHeightPx, popupWidthPx, popupHeightPx, isVertical, popupModePref,
     ) {
         val w: Float
         val h: Float
@@ -475,18 +472,14 @@ fun OcrLookupPopup(
 
         when (popupModePref) {
             "full_width" -> {
-                w = screenWidthPx - paddingPx * 2
-                h = minOf(popupHeightPx, screenHeightPx - paddingPx * 2)
-                bestX = paddingPx
-                val expH = if (isVertical) anchorHeight * maxOf(1, matchedCharCount) else anchorHeight
-                val bottomY = (screenHeightPx - h - paddingPx).coerceAtLeast(paddingPx)
+                w = screenWidthPx
+                h = minOf(popupHeightPx, screenHeightPx)
+                bestX = 0f
+                val expH = anchorHeight
+                val bottomY = screenHeightPx - h
                 val overlapsWord = anchorWidth > 0f && anchorHeight > 0f &&
-                    bottomY < anchorY + expH && bottomY + h > anchorY
-                bestY = if (overlapsWord) {
-                    (anchorY - h - gapPx).coerceIn(paddingPx, screenHeightPx - h - paddingPx)
-                } else {
-                    bottomY
-                }
+                    bottomY < anchorY + expH
+                bestY = if (overlapsWord) 0f else bottomY
             }
             "full_height" -> {
                 w = minOf(popupWidthPx, screenWidthPx * 0.5f, screenWidthPx - paddingPx * 2)
@@ -500,8 +493,8 @@ fun OcrLookupPopup(
                 }
             }
             else -> {
-            w = minOf(popupWidthPx, screenWidthPx - paddingPx * 2)
-            h = minOf(popupHeightPx, screenHeightPx - paddingPx * 2)
+            w = minOf(popupWidthPx, screenWidthPx)
+            h = minOf(popupHeightPx, screenHeightPx)
 
             val ax = anchorX
             val ay = anchorY
@@ -510,9 +503,8 @@ fun OcrLookupPopup(
             val acx = ax + aw / 2f
             val acy = ay + ah / 2f
 
-            // Expand anchor to cover the full matched term, not just first character
-            val expW = if (isVertical) aw else aw * maxOf(1, matchedCharCount)
-            val expH = if (isVertical) ah * maxOf(1, matchedCharCount) else ah
+            val expW = aw
+            val expH = ah
 
             // 4 candidate positions (top-left corner of popup)
             data class Pos(val x: Float, val y: Float)
