@@ -56,7 +56,8 @@ class NovelBackupCreator(
                         characterCount = bookmark?.characterCount ?: 0,
                         lastModified = bookmark?.lastModified ?: 0L,
                         stats = backupStats,
-                        categoryIds = metadata.categoryIds
+                        categoryIds = metadata.categoryIds,
+                        lang = metadata.lang,
                     )
                 )
             } catch (e: Exception) {

@@ -29,6 +29,8 @@ class NovelRestorer(
             if (localMetadata != null) {
                 val updatedMetadata = localMetadata.copy(
                     author = backupNovel.author ?: localMetadata.author,
+                    cover = backupNovel.cover ?: localMetadata.cover,
+                    lang = backupNovel.lang ?: localMetadata.lang,
                     categoryIds = (localMetadata.categoryIds + backupNovel.categoryIds).distinct()
                 )
                 BookStorage.saveMetadata(updatedMetadata, bookDir)
@@ -102,6 +104,7 @@ class NovelRestorer(
                 lastAccess = backupNovel.lastModified,
                 hash = backupNovel.id,
                 isGhost = true,
+                lang = backupNovel.lang,
                 categoryIds = backupNovel.categoryIds
             )
             BookStorage.saveMetadata(metadata, bookDir)

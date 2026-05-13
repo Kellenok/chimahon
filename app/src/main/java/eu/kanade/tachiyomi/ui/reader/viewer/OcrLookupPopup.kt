@@ -100,6 +100,7 @@ fun OcrLookupPopup(
     anchorHeight: Float = 0f,
     isVertical: Boolean,
     activeProfile: chimahon.anki.AnkiProfile,
+    type: String = "manga",
     mediaInfo: MediaInfo? = null,
     screenshot: Bitmap? = null,
     onRequestScreenshot: (() -> Bitmap?)? = null,
@@ -164,6 +165,7 @@ fun OcrLookupPopup(
     val showPitchText by dictionaryPreferences.showPitchText().collectAsState()
     val customCss by dictionaryPreferences.customCss().collectAsState()
     val wordAudioEnabled by dictionaryPreferences.wordAudioEnabled().collectAsState()
+    val groupPitches by dictionaryPreferences.groupPitches().collectAsState()
 
     val systemIsDark = isSystemInDarkTheme()
     val amoled by dictionaryPreferences.themeDarkAmoled().collectAsState()
@@ -379,6 +381,7 @@ fun OcrLookupPopup(
                     popupSelection = popupSelection,
                     styles = styles,
                     forceOpen = forceOpen,
+                    type = type,
                 )
                 if (ankiResult is AnkiResult.Success || ankiResult is AnkiResult.CardExists || ankiResult is AnkiResult.OpenCard) {
                     withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -424,6 +427,7 @@ fun OcrLookupPopup(
                     popupSelection = popupSelection,
                     styles = styles,
                     forceOpen = forceOpen,
+                    type = type,
                 )
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
                     when (ankiResult) {
@@ -659,6 +663,7 @@ fun OcrLookupPopup(
                     recursiveNavMode = recursiveNavMode,
                     customCss = customCss,
                     wordAudioEnabled = wordAudioEnabled,
+                    groupPitches = groupPitches,
                     webViewProvider = { webView },
                     onAnkiLookup = onAnkiLookup,
                     onRecursiveLookup = onRecursiveLookup,
