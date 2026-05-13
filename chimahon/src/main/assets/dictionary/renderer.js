@@ -1578,21 +1578,18 @@
     }
 
     if (mode === 'custom') {
-      // First pass: open all always_expanded dicts
-      let hasExpanded = false;
+      // Cascade: iterate priority order once.
+      // Each dictionary opens iff no preceding non-collapsed dict has already opened.
+      //   always_expanded  → always opens (blocks subsequent fallbacks)
+      //   fallback         → opens only if nothing above it opened yet
+      //   always_collapsed → never opens, does NOT block fallbacks
+      let contentOpened = false;
       for (const dictName of orderedNames) {
-        if ((displayModes[dictName] || 'fallback') === 'always_expanded') {
+        const dictMode = displayModes[dictName] || 'fallback';
+        if (dictMode === 'always_collapsed') continue;
+        if (dictMode === 'always_expanded' || !contentOpened) {
           open.add(dictName);
-          hasExpanded = true;
-        }
-      }
-      // Second pass: open first fallback only if no always_expanded exists
-      if (!hasExpanded) {
-        for (const dictName of orderedNames) {
-          if ((displayModes[dictName] || 'fallback') === 'fallback') {
-            open.add(dictName);
-            break;
-          }
+          contentOpened = true;
         }
       }
       return open;
