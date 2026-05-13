@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupNovelCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSavedSearch
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
@@ -68,6 +69,10 @@ abstract class SyncService(
             localSyncData.backup?.backupNovels,
             remoteSyncData.backup?.backupNovels,
         )
+        val mergedNovelCategoriesList = mergeNovelCategoriesLists(
+            localSyncData.backup?.backupNovelCategories,
+            remoteSyncData.backup?.backupNovelCategories,
+        )
         // Chimahon <--
 
         // Create the merged Backup object
@@ -84,6 +89,7 @@ abstract class SyncService(
 
             // Chimahon -->
             backupNovels = mergedNovelsList,
+            backupNovelCategories = mergedNovelCategoriesList,
             // Chimahon <--
         )
 
@@ -579,6 +585,26 @@ abstract class SyncService(
             }
         }
         return mergedList
+    }
+
+    private fun mergeNovelCategoriesLists(
+        localCategories: List<BackupNovelCategory>?,
+        remoteCategories: List<BackupNovelCategory>?,
+    ): List<BackupNovelCategory> {
+        if (localCategories == null) return remoteCategories ?: emptyList()
+        if (remoteCategories == null) return localCategories
+
+        val merged = mutableMapOf<String, BackupNovelCategory>()
+
+        (localCategories + remoteCategories).forEach { cat ->
+            val key = cat.id.ifBlank { cat.name }
+            val existing = merged[key]
+            if (existing == null || cat.order > existing.order) {
+                merged[key] = cat
+            }
+        }
+
+        return merged.values.toList()
     }
     // Chimahon <--
 }

@@ -122,6 +122,7 @@ class SyncManager(
             // KMK <--
             // Chimahon -->
             backupNovels = backupCreator.backupNovels(backupOptions),
+            backupNovelCategories = backupCreator.backupNovelCategories(backupOptions),
             // Chimahon <--
         )
         logcat(LogPriority.DEBUG) { "End create backup" }

@@ -298,25 +298,34 @@ class BackupRestorer(
         backupNovelCategories: List<eu.kanade.tachiyomi.data.backup.models.BackupNovelCategory>
     ) = launch {
         ensureActive()
-        
+
         try {
             novelRestorer.restoreCategories(backupNovelCategories)
             if (backupNovelCategories.isNotEmpty()) {
                 restoreProgress += 1
             }
-            novelRestorer.restore(backupNovels)
         } catch (e: Exception) {
-            errors.add(Date() to "Error Restoring Novels: ${e.message}")
+            errors.add(Date() to "Error Restoring Novel Categories: ${e.message}")
         }
 
-        restoreProgress += backupNovels.size
-        with(notifier) {
-            showRestoreProgress(
-                context.stringResource(MR.strings.label_novels),
-                restoreProgress,
-                restoreAmount,
-                isSync,
-            ).show(Notifications.ID_RESTORE_PROGRESS)
+        backupNovels.forEach { backupNovel ->
+            ensureActive()
+
+            try {
+                novelRestorer.restoreNovel(backupNovel)
+            } catch (e: Exception) {
+                errors.add(Date() to "${backupNovel.title}: ${e.message}")
+            }
+
+            restoreProgress += 1
+            with(notifier) {
+                showRestoreProgress(
+                    backupNovel.title,
+                    restoreProgress,
+                    restoreAmount,
+                    isSync,
+                ).show(Notifications.ID_RESTORE_PROGRESS)
+            }
         }
     }
     // Chimahon <--

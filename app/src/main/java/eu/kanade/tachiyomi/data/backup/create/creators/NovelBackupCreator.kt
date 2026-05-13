@@ -4,10 +4,10 @@ import android.content.Context
 import android.util.Log
 import com.canopus.chimareader.data.BookMetadata
 import com.canopus.chimareader.data.BookStorage
+import com.canopus.chimareader.data.md5Hex
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupStatEntry
-import java.security.MessageDigest
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -30,7 +30,7 @@ class NovelBackupCreator(
                 val bookmark = BookStorage.loadBookmark(bookDir)
                 val stats = BookStorage.loadStatistics(bookDir)
 
-                val stableId = md5Hex(metadata.title ?: bookDir.name)
+                val stableId = md5Hex("${(metadata.title ?: "").trim().lowercase()}|${(metadata.author ?: "").trim().lowercase()}")
 
                 val backupStats = stats?.map {
                     BackupStatEntry(
@@ -79,9 +79,4 @@ class NovelBackupCreator(
         }
     }
 
-    private fun md5Hex(input: String): String {
-        val digest = MessageDigest.getInstance("MD5")
-        val bytes = digest.digest(input.toByteArray())
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
 }

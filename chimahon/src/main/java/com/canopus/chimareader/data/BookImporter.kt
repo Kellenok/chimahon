@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
-import java.util.UUID
 import java.util.zip.ZipFile
 
 data class ImportResult(
@@ -123,17 +122,18 @@ object BookImporter {
 
             Log.d(TAG, "Parsed EPUB: title=$title, contentDir=${extractedBook.contentDirectory}, chapters=${extractedBook.spine.items.size}")
 
-            val metadata = BookMetadata(
-                id = stableId,
-                title = title,
-                cover = coverAbsPath,
-                folder = stableId,
-                lastAccess = existingLastAccess ?: System.currentTimeMillis(),
-                hash = stableId,
-                isGhost = false,
-                lang = extractedBook.language,
-                categoryIds = categoryIds ?: emptyList(),
-            )
+val metadata = BookMetadata(
+    id = stableId,
+    title = title,
+    author = author,
+    cover = coverAbsPath,
+    folder = stableId,
+    lastAccess = existingLastAccess ?: System.currentTimeMillis(),
+    hash = stableId,
+    isGhost = false,
+    lang = extractedBook.language,
+    categoryIds = categoryIds ?: emptyList(),
+)
             BookStorage.saveMetadata(metadata, bookDir)
             BookStorage.saveSpineCache(extractedBook.spine, bookDir)
 
@@ -328,12 +328,6 @@ object BookImporter {
                 "$selector{$cleaned}"
             }
         }
-    }
-
-    private fun md5Hex(input: String): String {
-        val digest = MessageDigest.getInstance("MD5")
-        val bytes = digest.digest(input.toByteArray())
-        return bytes.joinToString("") { "%02x".format(it) }
     }
 
     private fun md5Hex(file: File): String {

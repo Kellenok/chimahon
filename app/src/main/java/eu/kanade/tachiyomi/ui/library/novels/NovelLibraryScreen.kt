@@ -201,8 +201,12 @@ fun Screen.NovelLibraryScreen() {
                 contentPadding = contentPadding,
                 onCategoryChange = screenModel::updateActiveCategoryIndex,
                 onClickBook = { book ->
-                    val bookDir = com.canopus.chimareader.data.BookStorage.getBookDirectory(context, book.id)
-                    com.canopus.chimareader.ui.reader.NovelReaderActivity.launch(context, bookDir)
+                    if (book.isGhost) {
+                        epubPicker.launch("application/epub+zip")
+                    } else {
+                        val bookDir = com.canopus.chimareader.data.BookStorage.getBookDirectory(context, book.id)
+                        com.canopus.chimareader.ui.reader.NovelReaderActivity.launch(context, bookDir)
+                    }
                 },
             )
         }
@@ -623,6 +627,25 @@ fun NovelLibraryContent(
                     val bookTitle = book.title ?: ""
                     val bookLang = book.lang
 
+                    val ghostBadge: @Composable (androidx.compose.foundation.layout.RowScope.() -> Unit)? =
+                        if (book.isGhost) {
+                            {
+                                androidx.compose.material3.Surface(
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.errorContainer,
+                                ) {
+                                    androidx.compose.material3.Text(
+                                        text = "MISSING",
+                                        modifier = androidx.compose.ui.Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                }
+                            }
+                        } else {
+                            null
+                        }
+
                     if (displayMode == LibraryDisplayMode.ComfortableGrid) {
                         eu.kanade.presentation.library.components.MangaComfortableGridItem(
                             isSelected = isSelected,
@@ -636,6 +659,7 @@ fun NovelLibraryContent(
                                     )
                                 }
                             },
+                            coverBadgeEnd = ghostBadge,
                             onLongClick = onLongClick,
                             onClick = onClick,
                             usePanoramaCover = false,
@@ -653,6 +677,7 @@ fun NovelLibraryContent(
                                     )
                                 }
                             },
+                            coverBadgeEnd = ghostBadge,
                             onLongClick = onLongClick,
                             onClick = onClick,
                         )
