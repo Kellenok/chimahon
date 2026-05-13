@@ -372,6 +372,7 @@ class ChimaReaderActivity : NovelReaderActivity() {
                 anchorHeight = state.anchorHeight,
                 isVertical = state.isVertical,
                 activeProfile = getOrRefreshLookupPaths().first,
+                type = "novel",
                 // No screenshot — plain text selection only
                 mediaInfo = mediaInfo,
                 onRequestScreenshot = null,
