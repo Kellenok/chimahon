@@ -522,6 +522,7 @@ private class ReaderAndroidWebView(
             appendLine("html, body { writing-mode: horizontal-tb !important; }")
         }
 
+        appendLine("html, body { margin: 0 !important; padding: 0 !important; }")
         appendLine("::highlight(hoshi-selection) { background-color: rgba(130, 150, 200, 0.4); color: inherit; }")
         appendLine("p { margin-block-start: 0 !important; margin-block-end: ${readerSettings.paragraphSpacing}em !important; }")
         appendLine("body * { font-family: inherit !important; }")
@@ -738,6 +739,7 @@ private class ReaderAndroidWebView(
                 wrapper.style.setProperty('-webkit-box-decoration-break', 'clone', 'important');
                 wrapper.style.setProperty('box-decoration-break', 'clone', 'important');
                 b.style.setProperty('padding', '0', 'important');
+                b.style.setProperty('margin', '0', 'important');
 
                 wrapper.style.setProperty('font-size', '${readerSettings.fontSize}px', 'important');
                 wrapper.style.setProperty('line-height', '${readerSettings.lineHeight}', 'important');
@@ -1064,6 +1066,7 @@ private class ReaderAndroidWebView(
                 wrapper.style.setProperty('-webkit-box-decoration-break', 'clone', 'important');
                 wrapper.style.setProperty('box-decoration-break', 'clone', 'important');
                 b.style.setProperty('padding', '0', 'important');
+                b.style.setProperty('margin', '0', 'important');
 
                 wrapper.style.setProperty('font-size', '${settings.fontSize}px', 'important');
                 b.style.setProperty('font-size', '${settings.fontSize}px', 'important');
