@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -25,6 +26,9 @@ class AnkiDroidBridge(private val context: Context) {
 
     companion object {
         private const val TAG = "AnkiDroidBridge"
+        private const val SYNC_COOLDOWN_MS = 120_000L
+        private var lastSyncTimeMs = 0L
+
         const val PERMISSION = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
         const val PERMISSION_REQUEST_CODE = 2001
 
@@ -320,15 +324,28 @@ class AnkiDroidBridge(private val context: Context) {
 
     fun triggerSync() {
         try {
-            Log.d(TAG, "triggerSync: requesting AnkiDroid sync")
+            val now = SystemClock.elapsedRealtime()
+            val elapsed = now - lastSyncTimeMs
+            if (elapsed < SYNC_COOLDOWN_MS) {
+                Log.d(TAG, "triggerSync: skipped (cooldown ${(SYNC_COOLDOWN_MS - elapsed) / 1000}s remaining)")
+                return
+            }
+
+            context.packageManager.getPackageInfo("com.ichi2.anki", 0)
+
             val intent = Intent("com.ichi2.anki.DO_SYNC").apply {
                 setPackage("com.ichi2.anki")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             context.startActivity(intent)
-            Log.d(TAG, "triggerSync: intent sent successfully")
+            lastSyncTimeMs = now
+            Log.d(TAG, "triggerSync: sent")
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.w(TAG, "triggerSync: AnkiDroid not installed")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "triggerSync: permission denied: ${e.message}")
         } catch (e: Exception) {
-            Log.w(TAG, "triggerSync: failed", e)
+            Log.w(TAG, "triggerSync: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
