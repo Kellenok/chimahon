@@ -118,8 +118,17 @@ class ReaderStatisticsTracker(
     fun replaceHistory(history: List<Statistics>) {
         statistics = history.toMutableList()
         val todayKey = currentDateKey()
+        val historyToday = history.firstOrNull { it.dateKey == todayKey }
+        val mergedToday = if (historyToday != null) {
+            historyToday.updated(state.session.readingTime, state.session.charactersRead, System.currentTimeMillis())
+        } else {
+            state.today
+        }
         val base = history.filter { it.dateKey != todayKey }
-        state = state.copy(allTime = allTimeStatistic(base + state.today))
+        state = state.copy(
+            today = mergedToday,
+            allTime = allTimeStatistic(base + mergedToday),
+        )
     }
 
     private fun rollTodayIfNeeded() {

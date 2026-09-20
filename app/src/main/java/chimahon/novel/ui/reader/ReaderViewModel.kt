@@ -445,7 +445,7 @@ class ReaderViewModel(
         lastSavedProgress = currentProgress
         lastSavedCharacterCount = totalExploredCharCount
 
-        val stats = BookStorage.loadStatistics(rootUrl)
+        val stats = runBlocking(Dispatchers.IO) { loadPersistedStatistics() }
         if (stats != null) {
             fullStatistics.addAll(stats)
 
@@ -798,9 +798,7 @@ class ReaderViewModel(
         chapterSessionStartMs = now
         val durationMs = if (started > 0L) (now - started).coerceAtLeast(0L) else 0L
         val stats = statisticsTracker.statisticsForPersistence()
-        if (openNovel == null) {
-            runCatching { BookStorage.saveStatistics(stats, rootUrl) }
-        }
+        runCatching { BookStorage.saveStatistics(stats, rootUrl) }
         runBlocking(Dispatchers.IO) {
             runCatching { persistChapterRow(exitedIndex, currentProgress, totalExploredCharCount) }
                 .onFailure { Log.w("NovelReader", "close chapter persist failed", it) }
@@ -866,6 +864,30 @@ class ReaderViewModel(
         }
     }
 
+    private suspend fun loadPersistedStatistics(): List<Statistics>? {
+        val novel = openNovel
+        if (novel != null) {
+            val dbStats = ttuStatsRepository?.let { repo ->
+                runCatching { repo.getByNovelId(novel.id) }.getOrNull()
+                    ?.map {
+                        Statistics(
+                            title = document.title ?: "Unknown",
+                            dateKey = it.dateKey,
+                            charactersRead = it.charactersRead,
+                            readingTime = it.readingTime,
+                            minReadingSpeed = it.minReadingSpeed,
+                            altMinReadingSpeed = it.altMinReadingSpeed,
+                            lastReadingSpeed = it.lastReadingSpeed,
+                            maxReadingSpeed = it.maxReadingSpeed,
+                            completedBook = it.completedBook,
+                        )
+                    }
+            }
+            if (!dbStats.isNullOrEmpty()) return dbStats
+        }
+        return BookStorage.loadStatistics(rootUrl)
+    }
+
     /** Re-seeds position + statistics views from durable storage after an import. */
     private suspend fun reseedFromStorage() {
         val bookmark = withContext(Dispatchers.IO) {
@@ -881,28 +903,7 @@ class ReaderViewModel(
             statisticsTracker.resetBaseline(totalExploredCharCount)
             bridge.updateProgress(currentProgress)
         }
-        val history = withContext(Dispatchers.IO) {
-            if (openNovel == null) {
-                BookStorage.loadStatistics(rootUrl)
-            } else {
-                ttuStatsRepository?.let { repo ->
-                    runCatching { repo.getByNovelId(openNovel!!.id) }.getOrNull()
-                        ?.map {
-                            Statistics(
-                                title = document.title ?: "Unknown",
-                                dateKey = it.dateKey,
-                                charactersRead = it.charactersRead,
-                                readingTime = it.readingTime,
-                                minReadingSpeed = it.minReadingSpeed,
-                                altMinReadingSpeed = it.altMinReadingSpeed,
-                                lastReadingSpeed = it.lastReadingSpeed,
-                                maxReadingSpeed = it.maxReadingSpeed,
-                                completedBook = it.completedBook,
-                            )
-                        }
-                }
-            }
-        }
+        val history = withContext(Dispatchers.IO) { loadPersistedStatistics() }
         history?.let { statisticsTracker.replaceHistory(it) }
     }
 
@@ -1417,10 +1418,7 @@ class ReaderViewModel(
 
     private fun persistToDisk() {
         val stats = statisticsTracker.statisticsForPersistence()
-        // Sidecar survives only for unregistered books; rows carry the rest.
-        if (openNovel == null) {
-            BookStorage.saveStatistics(stats, rootUrl)
-        }
+        runCatching { BookStorage.saveStatistics(stats, rootUrl) }
         persistStatsToDb(stats)
     }
 
