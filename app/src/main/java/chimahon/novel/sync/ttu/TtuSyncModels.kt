@@ -88,6 +88,7 @@ sealed interface SyncResult {
 data class DriveFile(
     val id: String,
     val name: String,
+    val parents: List<String> = emptyList(),
 )
 
 data class DriveSyncFiles(

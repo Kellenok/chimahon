@@ -174,8 +174,8 @@ fun Screen.NovelLibraryScreen(
         syncStatus?.start()
         syncStatus?.updateProgress(0f)
         try {
-            refs.forEachIndexed { index, ref ->
-                when (val result = sync.syncBook(ref, direction)) {
+            sync.syncBooks(refs, direction) { current, total, result ->
+                when (result) {
                     is SyncResult.Imported -> imported++
                     is SyncResult.Exported -> exported++
                     is SyncResult.Synced -> synced++
@@ -185,9 +185,7 @@ fun Screen.NovelLibraryScreen(
                         Log.w("TtuSyncUi", "TTU sync failed for '${result.title}': ${result.error}")
                     }
                 }
-                if (refs.isNotEmpty()) {
-                    syncStatus?.updateProgress((index + 1).toFloat() / refs.size.toFloat())
-                }
+                syncStatus?.updateProgress(current.toFloat() / total.toFloat())
             }
         } finally {
             syncStatus?.stop()

@@ -80,6 +80,13 @@ class TtuDriveClient(
         return folderId
     }
 
+    fun preloadBookFolders(rootId: String) {
+        val query = "trashed=false and '${rootId.driveQueryLiteral()}' in parents and mimeType='$FOLDER_MIME_TYPE'"
+        listFiles(query).forEach { folder ->
+            cacheBookFolder(folder.name, folder.id)
+        }
+    }
+
     fun listSyncFiles(folderId: String): DriveSyncFiles {
         val query = "trashed=false and '${folderId.driveQueryLiteral()}' in parents and mimeType != '$FOLDER_MIME_TYPE'"
         val files = listFiles(query)
@@ -87,6 +94,26 @@ class TtuDriveClient(
             progress = files.latestTtuFile("progress_", TtuSyncRules::parseProgressTimestampMillis),
             statistics = files.latestTtuFile("statistics_", TtuSyncRules::parseStatisticsTimestampMillis),
         )
+    }
+
+    fun listSyncFiles(folderIds: List<String>): Map<String, DriveSyncFiles> {
+        if (folderIds.isEmpty()) return emptyMap()
+        val grouped = folderIds.associateWith { mutableListOf<DriveFile>() }.toMutableMap()
+        folderIds.chunked(50).forEach { chunk ->
+            val parentQuery = chunk.joinToString(" or ") { "'${it.driveQueryLiteral()}' in parents" }
+            val query = "trashed=false and mimeType != '$FOLDER_MIME_TYPE' and ($parentQuery)"
+            listFiles(query).forEach { file ->
+                file.parents.forEach { parent ->
+                    grouped[parent]?.add(file)
+                }
+            }
+        }
+        return grouped.mapValues { (_, files) ->
+            DriveSyncFiles(
+                progress = files.latestTtuFile("progress_", TtuSyncRules::parseProgressTimestampMillis),
+                statistics = files.latestTtuFile("statistics_", TtuSyncRules::parseStatisticsTimestampMillis),
+            )
+        }
     }
 
     fun downloadFile(fileId: String): String {
@@ -157,7 +184,7 @@ class TtuDriveClient(
             val tokenQuery = pageToken?.let {
                 "&pageToken=${URLEncoder.encode(it, StandardCharsets.UTF_8.name())}"
             }.orEmpty()
-            val url = "$DRIVE_API/files?q=$encodedQuery&fields=nextPageToken,files(id,name)&pageSize=100$tokenQuery"
+            val url = "$DRIVE_API/files?q=$encodedQuery&fields=nextPageToken,files(id,name,parents)&pageSize=100$tokenQuery"
             val data = performRequest(url = url, method = "GET")
             val obj = json.parseToJsonElement(data.decodeToString()).jsonObject
             files += obj["files"]?.jsonArray?.map { element ->
@@ -165,6 +192,7 @@ class TtuDriveClient(
                 DriveFile(
                     id = fileObj["id"]?.jsonPrimitive?.content ?: "",
                     name = fileObj["name"]?.jsonPrimitive?.content ?: "",
+                    parents = fileObj["parents"]?.jsonArray?.mapNotNull { it.jsonPrimitive.content }.orEmpty(),
                 )
             }.orEmpty()
             pageToken = obj["nextPageToken"]?.jsonPrimitive?.content

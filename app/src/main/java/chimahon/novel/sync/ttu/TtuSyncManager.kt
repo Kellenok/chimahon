@@ -110,10 +110,55 @@ class TtuSyncManager(
         }
     }
 
+    suspend fun syncBooks(
+        refs: List<TtuBookRef>,
+        direction: SyncDirection = SyncDirection.AUTO,
+        onProgress: ((current: Int, total: Int, result: SyncResult) -> Unit)? = null,
+    ): List<SyncResult> {
+        if (!isEnabled || refs.isEmpty()) return refs.map { SyncResult.Skipped }
+        val rootId = driveClient.findOrCreateRootFolder()
+        runCatching { driveClient.preloadBookFolders(rootId) }
+
+        val states = refs.map { it to localStore.read(it) }
+        val folderMap = states.mapNotNull { (ref, state) ->
+            if (state == null) return@mapNotNull null
+            val folderName = folderNames.get(state.novelId, ref.folder)
+                ?: TtuSyncRules.sanitizeTtuFilename(ref.title)
+            val folderId = driveClient.findOrCreateBookFolder(
+                rootId = rootId,
+                folderName = folderName,
+                coverDataProvider = state.coverBytes?.let { bytes -> { bytes } },
+            )
+            folderNames.set(state.novelId, ref.folder, folderName)
+            ref to (state to folderId)
+        }.toMap()
+
+        val preloadedFiles = driveClient.listSyncFiles(folderMap.values.map { it.second }.distinct())
+
+        return refs.mapIndexed { index, ref ->
+            val pair = folderMap[ref]
+            val result = if (pair == null) {
+                SyncResult.Skipped
+            } else {
+                val (state, folderId) = pair
+                val files = preloadedFiles[folderId] ?: DriveSyncFiles()
+                try {
+                    performSync(state, direction, importOnly = false, preloadedFiles = files)
+                } catch (e: Exception) {
+                    Log.e(TAG, "syncBooks failed for '${ref.title}'", e)
+                    SyncResult.Failed(ref.title, e.message ?: "Unknown error")
+                }
+            }
+            onProgress?.invoke(index + 1, refs.size, result)
+            result
+        }
+    }
+
     private suspend fun performSync(
         state: TtuLocalState,
         direction: SyncDirection,
         importOnly: Boolean,
+        preloadedFiles: DriveSyncFiles? = null,
     ): SyncResult {
         val displayTitle = state.ref.title
         val rootId = driveClient.findOrCreateRootFolder()
@@ -127,7 +172,7 @@ class TtuSyncManager(
         )
         folderNames.set(state.novelId, state.ref.folder, folderName)
 
-        val remoteFiles = driveClient.listSyncFiles(bookFolderId)
+        val remoteFiles = preloadedFiles ?: driveClient.listSyncFiles(bookFolderId)
         Log.d(
             TAG,
             "performSync state: folder='$folderName', localLastModified=${state.lastModified}, remoteProgress=${remoteFiles.progress?.name}",
