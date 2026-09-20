@@ -28,7 +28,8 @@ object LenientLongSerializer : KSerializer<Long> {
 
 @Serializable
 data class TtuProgress(
-    val dataId: Int = 0,
+    @Serializable(with = LenientLongSerializer::class)
+    val dataId: Long = 0L,
     val exploredCharCount: Int = 0,
     val progress: Double = 0.0,
     @Serializable(with = LenientLongSerializer::class)
@@ -36,12 +37,16 @@ data class TtuProgress(
 )
 
 enum class SyncDirection {
-    IMPORT, EXPORT, AUTO, SYNCED
+    IMPORT,
+    EXPORT,
+    AUTO,
+    SYNCED,
 }
 
 enum class SyncMode(val rawValue: String) {
     Auto("Auto"),
-    Manual("Manual");
+    Manual("Manual"),
+    ;
 
     companion object {
         fun fromRawValue(rawValue: String?): SyncMode =
@@ -51,7 +56,8 @@ enum class SyncMode(val rawValue: String) {
 
 enum class StatisticsSyncMode(val rawValue: String) {
     Merge("Merge"),
-    Replace("Replace");
+    Replace("Replace"),
+    ;
 
     companion object {
         fun fromRawValue(rawValue: String?): StatisticsSyncMode =

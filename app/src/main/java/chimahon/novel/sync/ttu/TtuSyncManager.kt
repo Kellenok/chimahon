@@ -21,7 +21,10 @@ class TtuSyncManager(
     private val folderNames: TtuFolderNames = TtuFolderNames(context),
     private val localStore: TtuLocalStore = TtuLocalStoreImpl(context),
     private val driveClient: TtuDriveClient = TtuDriveClient(context, authManager),
-    private val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true },
+    private val json: Json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    },
 ) {
 
     val settingsFlow: Flow<SyncSettings>
@@ -163,22 +166,30 @@ class TtuSyncManager(
                 val content = driveClient.downloadFile(remoteFiles.progress.id)
                 val ttuProgress = json.decodeFromString<TtuProgress>(content)
                 val (chapterIndex, fraction) = resolveCharacterPosition(state, ttuProgress)
-                localStore.writePosition(
+                val writeSuccess = localStore.writePosition(
                     ref = state.ref,
                     chapterIndex = chapterIndex,
                     progress = fraction,
                     characterCount = ttuProgress.exploredCharCount,
                     lastModified = ttuProgress.lastBookmarkModified,
                 )
-                importedCharacterCount = ttuProgress.exploredCharCount
-                imported = true
-                Log.d(
-                    TAG,
-                    "importProgress saved: title='$displayTitle', remoteFile='${remoteFiles.progress.name}', " +
-                        "chapter=$chapterIndex, progress=$fraction, chars=$importedCharacterCount",
-                )
+                if (writeSuccess) {
+                    importedCharacterCount = ttuProgress.exploredCharCount
+                    imported = true
+                    Log.d(
+                        TAG,
+                        "importProgress saved: title='$displayTitle', remoteFile='${remoteFiles.progress.name}', " +
+                            "chapter=$chapterIndex, progress=$fraction, chars=$importedCharacterCount",
+                    )
+                } else {
+                    Log.w(TAG, "importProgress writePosition failed: title='$displayTitle'")
+                    return SyncResult.Failed(displayTitle, "Failed to write local bookmark")
+                }
+            } catch (e: DriveFileNotFoundException) {
+                throw e
             } catch (e: Exception) {
-                Log.w(TAG, "importProgress failed: title='$displayTitle', file='${remoteFiles.progress.name}'", e)
+                Log.e(TAG, "importProgress failed: title='$displayTitle', file='${remoteFiles.progress.name}'", e)
+                return SyncResult.Failed(displayTitle, e.message ?: "Failed to import progress")
             }
         } else {
             Log.d(TAG, "importProgress skipped: title='$displayTitle', no remote progress file")
@@ -233,7 +244,7 @@ class TtuSyncManager(
             }
 
             val ttuProgress = TtuProgress(
-                dataId = remoteProgress?.dataId ?: 0,
+                dataId = remoteProgress?.dataId ?: 0L,
                 exploredCharCount = state.characterCount,
                 progress = charBasedProgress,
                 lastBookmarkModified = state.lastModified,
@@ -338,8 +349,10 @@ class TtuSyncManager(
                     stat
                 } else {
                     val newer = if (stat.charactersRead > existing.charactersRead ||
-                        (stat.charactersRead == existing.charactersRead &&
-                            stat.readingTime > existing.readingTime)
+                        (
+                            stat.charactersRead == existing.charactersRead &&
+                                stat.readingTime > existing.readingTime
+                            )
                     ) {
                         stat
                     } else {
