@@ -44,21 +44,21 @@ object TtuSyncRules {
     fun parseProgressTimestampMillis(file: DriveFile?): Long? {
         val name = file?.name ?: return null
         if (!name.startsWith("progress_")) return null
-        val parts = name.split("_")
-        if (parts.size <= 4) return null
-        return parts[3].toLongOrNull()
+        return name.removeSuffix(".json").split("_").getOrNull(3)?.toLongOrNull()
     }
 
     fun parseStatisticsTimestampMillis(file: DriveFile?): Long? {
         val name = file?.name ?: return null
         if (!name.startsWith("statistics_")) return null
-        val parts = name.split("_")
-        if (parts.size <= 3) return null
-        return parts[3].toLongOrNull()
+        return name.removeSuffix(".json").split("_").getOrNull(3)?.toLongOrNull()
     }
 
-    fun determineDirection(localLastModified: Long?, remoteProgressFile: DriveFile?): SyncDirection {
-        val localMillis = localLastModified
+    fun determineDirection(
+        localLastModified: Long?,
+        remoteProgressFile: DriveFile?,
+        localCharacterCount: Int = 0,
+    ): SyncDirection {
+        val localMillis = if (localCharacterCount > 0) localLastModified else null
         val remoteMillis = parseProgressTimestampMillis(remoteProgressFile)
         return when {
             localMillis == null && remoteMillis == null -> SyncDirection.SYNCED

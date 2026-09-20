@@ -113,7 +113,7 @@ class TtuSyncManager(
     suspend fun syncBooks(
         refs: List<TtuBookRef>,
         direction: SyncDirection = SyncDirection.AUTO,
-        onProgress: ((current: Int, total: Int, result: SyncResult) -> Unit)? = null,
+        onProgress: (suspend (current: Int, total: Int, result: SyncResult) -> Unit)? = null,
     ): List<SyncResult> {
         if (!isEnabled || refs.isEmpty()) return refs.map { SyncResult.Skipped }
         val rootId = driveClient.findOrCreateRootFolder()
@@ -181,7 +181,7 @@ class TtuSyncManager(
         val resolvedDirection = if (direction != SyncDirection.AUTO) {
             direction
         } else {
-            TtuSyncRules.determineDirection(state.lastModified, remoteFiles.progress)
+            TtuSyncRules.determineDirection(state.lastModified, remoteFiles.progress, state.characterCount)
         }
         Log.d(TAG, "performSync direction: requested=$direction, resolved=$resolvedDirection")
 

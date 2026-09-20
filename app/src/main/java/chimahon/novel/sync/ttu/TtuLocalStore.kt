@@ -115,7 +115,7 @@ class TtuLocalStoreImpl(
             NovelChapterUpdate(
                 id = chapter.id,
                 read = if (safeProgress.isNovelReadComplete() && !chapter.read) true else null,
-                lastPageRead = maxOf(characterCount.toLong().coerceAtLeast(0), chapter.lastPageRead),
+                lastPageRead = characterCount.toLong().coerceAtLeast(0),
                 progress = safeProgress,
             ),
         )
@@ -124,6 +124,18 @@ class TtuLocalStoreImpl(
             lastRead = lastModified,
             timeRead = 0L,
         )
+        val dir = BookStorage.getBookDirectory(appContext, ref.folder)
+        if (dir.isDirectory) {
+            BookStorage.saveBookmark(
+                Bookmark(
+                    chapterIndex = chapterIndex,
+                    progress = safeProgress,
+                    characterCount = characterCount,
+                    lastModified = lastModified,
+                ),
+                dir,
+            )
+        }
         true
     }.getOrDefault(false)
 
@@ -132,10 +144,12 @@ class TtuLocalStoreImpl(
         stats: List<Statistics>,
         replace: Boolean,
     ): Boolean = runCatching {
+        val dir = BookStorage.getBookDirectory(appContext, ref.folder)
+        if (dir.isDirectory) {
+            BookStorage.saveStatistics(stats, dir)
+        }
         val novelId = novelRepository?.getNovelByLocalFolder(ref.folder)?.id
         if (novelId == null) {
-            val dir = BookStorage.getBookDirectory(appContext, ref.folder)
-            BookStorage.saveStatistics(stats, dir)
             return true
         }
         val repo = statsRepository ?: return false
@@ -185,16 +199,20 @@ class TtuLocalStoreImpl(
         val stats = BookStorage.loadStatistics(dir).orEmpty()
         val sizes = epubChapterSizes(dir)
         val totals = sizes?.let { it.sumOf { c -> c.toLong() } to it.size }
+        val charCount = bookmark?.characterCount ?: 0
+        val progress = bookmark?.progress ?: 0.0
+        val index = bookmark?.chapterIndex ?: 0
+        val hasReadLocally = charCount > 0 || progress > 0.0 || index > 0
         return TtuLocalState(
             ref = ref,
             novelId = null,
-            chapterIndex = bookmark?.chapterIndex ?: 0,
-            progress = bookmark?.progress ?: 0.0,
-            characterCount = bookmark?.characterCount ?: 0,
+            chapterIndex = index,
+            progress = progress,
+            characterCount = charCount,
             totalCharacters = totals?.first ?: 0L,
             chapterCount = totals?.second ?: 0,
             chapterSizes = sizes,
-            lastModified = bookmark?.lastModified,
+            lastModified = if (hasReadLocally) bookmark?.lastModified else null,
             statistics = stats,
             coverBytes = epubCover(dir),
         )
@@ -227,16 +245,19 @@ class TtuLocalStoreImpl(
             }
         val sizes = epubChapterSizes(dir)
         val totals = sizes?.let { it.sumOf { c -> c.toLong() } to it.size }
+        val charCount = chapter?.lastPageRead?.toInt() ?: 0
+        val progress = chapter?.progress?.coerceIn(0.0, 1.0) ?: 0.0
+        val hasReadLocally = charCount > 0 || progress > 0.0 || index > 0
         return TtuLocalState(
             ref = ref,
             novelId = novelId,
             chapterIndex = index,
-            progress = chapter?.progress?.coerceIn(0.0, 1.0) ?: 0.0,
-            characterCount = chapter?.lastPageRead?.toInt() ?: 0,
+            progress = progress,
+            characterCount = charCount,
             totalCharacters = totals?.first ?: 0L,
             chapterCount = totals?.second ?: chapters.size,
             chapterSizes = sizes,
-            lastModified = history?.lastRead,
+            lastModified = if (hasReadLocally) history?.lastRead else null,
             statistics = stats,
             coverBytes = epubCover(dir),
         )
